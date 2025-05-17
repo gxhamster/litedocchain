@@ -11,25 +11,38 @@ class BlockHeader:
   def SetNull(self):
     self.version = 0
     self.time: float = 0
-    self.hashPrevBlock: str | None = None
-    self.hash: str | None = None
+    self.hashPrevBlock: bytes = b''  # Hash is stored real (32 bytes)
+    self.hash: bytes = b''            # Hash is stored real (32 bytes)
     self.nonce: int = 0
 
   # Calculate the hash for all the block contents
-  def CalculateHash(self, blockData=None) -> str:
-    buffer = []
-    buffer.append(str(self.version))
-    buffer.append(str(self.time))
-    buffer.append(str(self.hashPrevBlock))
-    buffer.append(str(self.nonce))
-    if blockData is not None:
-      buffer.append(str(blockData))
-    bufferStr = "".join(buffer)
-    bufferStr = bufferStr.encode()
-    return hashlib.sha256(bufferStr).hexdigest()
-
+  def CalculateHash(self, blockData: bytes=b'') -> bytes:
+    # buffer = []
+    # buffer.append(str(self.version))
+    # buffer.append(str(self.time))
+    # buffer.append(self.hashPrevBlock)
+    # buffer.append(str(self.nonce))
+    # if blockData is not None:
+    #   buffer.append(str(blockData))
+    # bufferStr = "".join(buffer)
+    # bufferStr = bufferStr.encode()
+    # return hashlib.sha256(bufferStr).digest()
+    buffer = bytearray()
+    buffer.append(self.version)
+    buffer.extend(str(self.time).encode())
+    buffer.extend(self.hashPrevBlock)
+    buffer.extend(str(self.nonce).encode())
+    if blockData != b'':
+      buffer.extend(blockData)
+    return hashlib.sha256(buffer).digest()
+  
   def __repr__(self):
-     return f"BlockHeader(version={self.version}, time={self.time}, prev={self.hashPrevBlock} hash={self.hash}, nonce={self.nonce})"
+     return f"""BlockHeader(
+  version={self.version},
+  time={self.time},
+  prev={self.hashPrevBlock},
+  hash={self.hash}, 
+  nonce={self.nonce})"""
 
 class Block:
   """ For simplicty in this project, we will consider one document
@@ -40,16 +53,16 @@ class Block:
   """
   def __init__(self) -> None:
     self.hdr = BlockHeader()
-    self.signature: str | None = None
+    self.signature: bytes = b''
   
-  def MineBlock(self) -> str:
+  def MineBlock(self) -> bytes:
     """ Find a nonce value that gives us a hash of some pattern.
     Bitcoin accepts a hash starting with 10 zeros (could be more).
     We will use a pattern that gives 3 zeros just to make it faster
     """
     tempHash = self.hdr.CalculateHash(self.signature)
-    difficulty = 3
-    while not tempHash.startswith('0' * difficulty):
+    difficulty = 2
+    while not tempHash.startswith(b'\x00' * difficulty):
       self.hdr.nonce += 1
       tempHash = self.hdr.CalculateHash(self.signature)
     self.hdr.hash = tempHash
@@ -62,12 +75,7 @@ class Block:
       return False
   
   def __repr__(self) -> str:
-    return f"""Block(BlockHeader(
-    version={self.hdr.version},
-    time={self.hdr.time},
-    prev={self.hdr.hashPrevBlock},
-    hash={self.hdr.hash},
-    nonce={self.hdr.nonce}),
+    return f"""Block({self.hdr}
   signature={self.signature}
 )"""
 
@@ -75,13 +83,13 @@ class Chain:
   def __init__(self) -> None:
     self.localChain: list[Block] = []
   
-  def SearchByBlockHash(self, hash: str) -> Block | None:
+  def SearchByBlockHash(self, hash: bytes) -> Block | None:
     for b in self.localChain:
       if b.hdr.hash == hash:
         return b
     return None
   
-  def ModifyBlockByHash(self, hash: str) -> None:
+  def ModifyBlockByHash(self, hash: bytes) -> None:
     targetBlock = self.SearchByBlockHash(hash)
     if targetBlock is not None:
       pass
@@ -134,10 +142,10 @@ class Chain:
     if len(self.localChain) == 0:
       genesis = Block()
       genesis.hdr.version = VERSION
-      genesis.signature = 'genesis'
+      genesis.signature = b'genesis'
       genesis.hdr.time = time.time()
-      genesis.hdr.hashPrevBlock = '0' * 64
-      genesis.hdr.CalculateHash(genesis.signature)
+      genesis.hdr.hashPrevBlock = b'0' * 32
+      genesis.hdr.hash = genesis.hdr.CalculateHash(genesis.signature)
       genesis.MineBlock()
       if genesis.IsBlockValid():
         self.localChain.append(genesis)
@@ -146,7 +154,7 @@ class Chain:
     else:
       raise AssertionError("Genesis block has already been mined")
      
-  def GetBlockIdx(self, blockHash: str) -> int | None:
+  def GetBlockIdx(self, blockHash: bytes) -> int | None:
     for idx in range(len(self.localChain)):
       if self.localChain[idx].hdr.hash == blockHash:
         return idx
@@ -161,16 +169,16 @@ class Chain:
   def __iter__(self):
     return self.localChain.__iter__()
       
+if __name__ == "__main__":
+  chain = Chain()
+  bloc = Block()
+  bloc.signature = b'hello world1'
+  chain.CreateGenesisBlock()
+  chain.AddBlockToChain(bloc)
+  bloc2 = Block()
+  bloc2.signature = b'hello world2'
+  chain.InsertBlockToChain(chain.GetGenesisBlock(), bloc2)
+  for i in chain:
+    print(i)
 
-chain = Chain()
-bloc = Block()
-bloc.signature = 'hello world1'
-chain.CreateGenesisBlock()
-chain.AddBlockToChain(bloc)
-bloc2 = Block()
-bloc2.signature = 'hello world2'
-chain.InsertBlockToChain(chain.GetGenesisBlock(), bloc2)
-for i in chain:
-  print(i)
-
-print("Chain Integrity: ", chain.CheckChainIntegrity())
+  print("Chain Integrity: ", chain.CheckChainIntegrity())
