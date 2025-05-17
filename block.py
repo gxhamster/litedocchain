@@ -17,16 +17,6 @@ class BlockHeader:
 
   # Calculate the hash for all the block contents
   def CalculateHash(self, blockData: bytes=b'') -> bytes:
-    # buffer = []
-    # buffer.append(str(self.version))
-    # buffer.append(str(self.time))
-    # buffer.append(self.hashPrevBlock)
-    # buffer.append(str(self.nonce))
-    # if blockData is not None:
-    #   buffer.append(str(blockData))
-    # bufferStr = "".join(buffer)
-    # bufferStr = bufferStr.encode()
-    # return hashlib.sha256(bufferStr).digest()
     buffer = bytearray()
     buffer.append(self.version)
     buffer.extend(str(self.time).encode())
