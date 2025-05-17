@@ -32,7 +32,7 @@ class MessageHeader(Serializable):
     which type of packet and which decoder to use.
     """
     struct = Struct('>12sHI4s')
-
+    CHECKSUM_LEN = 4
     def __init__(self, command: int = 0) -> None:
         super().__init__()
         self.magic: bytes = b'litedocchain' # 12 bytes (char)
@@ -53,10 +53,14 @@ class MessageHeader(Serializable):
         return self
 
     def __repr__(self) -> str:
-        return f"MessageHeader({self.__dict__})"
+        return f"""MessageHeader(
+    magic={self.magic},
+    command={self.command},
+    size={self.size},
+    checksum={self.checksum})"""
 
 class GetBlocksMsg(Serializable):
-    struct = Struct('>64s64s')   
+    struct = Struct('>32s32s')   
     def __init__(self) -> None:
         super().__init__()
         self.hdr: MessageHeader = MessageHeader(1)
@@ -80,21 +84,20 @@ class GetBlocksMsg(Serializable):
         return self
             
     def SetChecksumSize(self) -> None:
-        self.hdr.checksum = self.CalculateChecksum().encode()
+        self.hdr.checksum = self.CalculateChecksum()
         self.hdr.size = len(self.SerializeFields())
 
-    def CalculateChecksum(self) -> str:
+    def CalculateChecksum(self) -> bytes:
         dataBuf = self.SerializeFields()
-        checksum = hashlib.sha256(dataBuf).hexdigest()[:4]
+        checksum = hashlib.sha256(dataBuf).digest()[:MessageHeader.CHECKSUM_LEN]
         return checksum
 
     
     def __repr__(self) -> str:
-        s = []
-        for key, val in self.__dict__.items():
-            s.append(f"{key}={val}")
-
-        return "{}({})".format(self.__class__.__name__, ", ".join(s))
+        return f"""GetBlocksMsg(
+    {self.hdr},
+    highestHash={self.highestHash},
+    stoppingHash={self.stoppingHash})"""
 
 
 class NetNode:
@@ -108,8 +111,8 @@ class NetNode:
     def createServer(self):
         print("Starting server")
         msg = GetBlocksMsg()
-        msg.highestHash = hashlib.sha256(b'hello').hexdigest().encode()
-        msg.stoppingHash = b'0' * 64
+        msg.highestHash = hashlib.sha256(b'hello').digest()
+        msg.stoppingHash = b'0' * 32
         msg.SetChecksumSize()
         sendData = msg.Serialize()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -137,20 +140,23 @@ class NetNode:
                 if data[:12] == b'litedocchain':
                     hdr = MessageHeader(0)
                     hdr = hdr.Deserialize(data[:22])
+                    msg = GetBlocksMsg()
+                    print(msg.Deserialize(data))
                     print(hdr)
                     print(data[23:])
-                    calcChecksum = hashlib.sha256(data[22:]).hexdigest().encode()[:4]
+                    calcChecksum = hashlib.sha256(data[22:]).digest()[:4]
                     print('Checksum: ', calcChecksum, ', Hdr Checksum: ', hdr.checksum)
                     assert calcChecksum == hdr.checksum
 
-n = NetNode("localhost")
-b1 = Block()
-n.chain.localChain.append(Block())
+if __name__ == "__main__":
+    n = NetNode("localhost")
+    b1 = Block()
+    n.chain.localChain.append(Block())
 
-serverThread = threading.Thread(target=n.createServer)
-serverThread.start()
-time.sleep(1)
-n.createClient()
+    serverThread = threading.Thread(target=n.createServer)
+    serverThread.start()
+    time.sleep(1)
+    n.createClient()
 
 # m = MessageHeader(2)
 # m.size = 128
