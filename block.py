@@ -136,6 +136,7 @@ class Chain:
       genesis.hdr.version = VERSION
       genesis.signature = 'genesis'
       genesis.hdr.time = time.time()
+      genesis.hdr.hashPrevBlock = '0' * 64
       genesis.hdr.CalculateHash(genesis.signature)
       genesis.MineBlock()
       if genesis.IsBlockValid():
