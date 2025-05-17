@@ -1,75 +1,90 @@
-from zlib import crc32
-from struct import pack, unpack
-import json
+from struct import Struct
+from abc import ABC, abstractmethod
+from typing import Self
 import socket
 import hashlib
 import threading
 import time
+from block import Chain, Block, BlockHeader
+
+class Serializable(ABC):
+    """ This class should be inherited by all the classes which
+    implement a message protocol that will be send on the blockchain
+    network.
+    """
+    struct = None
+    def __init__(self) -> None:
+        if self.struct is None:
+            raise TypeError("A derived class of Serializable must have struct")
+
+    @abstractmethod
+    def Serialize(self) -> bytes:
+        pass
+
+    @abstractmethod
+    def Deserialize(self, buffer: bytes) -> Self:
+        pass
 
 
-class MessageHeader(object):
-    def __init__(self, command: int) -> None:
+class MessageHeader(Serializable):
+    """ Every message sent on the blockchain network will have a header
+    with the metadata of the payload. Command field will be used to identify
+    which type of packet and which decoder to use.
+    """
+    struct = Struct('>12sHI4s')
+
+    def __init__(self, command: int = 0) -> None:
+        super().__init__()
         self.magic: bytes = b'litedocchain' # 12 bytes (char)
         self.command: int = command         # 02 bytes (short)
         self.size: int = 0                  # 04 bytes (int) Size of the payload. Bitcoin max=32MB
         self.checksum: bytes = b''          # 04 bytes (char) 4 byte sha256 of payload
-    
-    @staticmethod
-    def packHdrFrom(msgHdr) -> bytes:
-        return pack('>12sHI4s', msgHdr.magic, msgHdr.command, msgHdr.size, msgHdr.checksum)
+            
+    def Serialize(self) -> bytes:
+        return self.struct.pack(self.magic, self.command, self.size, self.checksum)
 
-    def packHdr(self) -> bytes:
-        return pack('>12sHI4s', self.magic, self.command, self.size, self.checksum)
-    
-    @staticmethod
-    def unpackHdrInto(buffer: bytes):
-        m, c, s, ch = unpack('>12sHI4s', buffer)
-        unpackedHdr = MessageHeader(c)
-        unpackedHdr.magic = m
-        assert unpackedHdr.magic == b'litedocchain'
-        unpackedHdr.size = s
-        unpackedHdr.command = c
-        unpackedHdr.checksum = ch
-        return unpackedHdr
-    
-    def unpackHdr(self, buffer: bytes):
-        unpackedHdr = MessageHeader.unpackHdrInto(buffer)
-        self.magic = unpackedHdr.magic
-        self.command = unpackedHdr.command
-        self.size = unpackedHdr.size
-        self.checksum = unpackedHdr.checksum
+    def Deserialize(self, buffer: bytes):
+        m, c, s, ch  = self.struct.unpack(buffer)
+        self.magic = m
+        assert self.magic == b'litedocchain'
+        self.command = c
+        self.size = s
+        self.checksum = ch
         return self
 
     def __repr__(self) -> str:
         return f"MessageHeader({self.__dict__})"
 
-class GetBlocksMsg(MessageHeader):   
+class GetBlocksMsg(Serializable):
+    struct = Struct('>64s64s')   
     def __init__(self) -> None:
-        super().__init__(1)
+        super().__init__()
+        self.hdr: MessageHeader = MessageHeader(1)
         self.highestHash: bytes = b''  # 64 bytes
         self.stoppingHash: bytes = b'' # 64 bytes
 
-    def Serialize(self) -> bytes:
-        return pack('>64s64s', self.highestHash, self.stoppingHash)
+    def SerializeFields(self) -> bytes:
+        return self.struct.pack(self.highestHash, self.stoppingHash)
     
-    def SerializeFull(self) -> bytes:
-        buf = bytearray(self.packHdr())
-        buf.extend(self.Serialize())
+    def Serialize(self) -> bytes:
+        self.hdr
+        buf = bytearray(self.hdr.Serialize())
+        buf.extend(self.SerializeFields())
         return bytes(buf)
     
-    def Load(self, buffer: bytes):
-        self.unpackHdr(buffer[:22])
-        h, s = unpack('>64s64s', buffer[22:])
+    def Deserialize(self, buffer: bytes):
+        self.hdr = self.hdr.Deserialize(buffer[:22])
+        h, s = self.struct.unpack(buffer[22:])
         self.highestHash = h
         self.stoppingHash = s
         return self
             
     def SetChecksumSize(self) -> None:
-        self.checksum = self.CalculateChecksum().encode()
-        self.size = len(self.Serialize())
+        self.hdr.checksum = self.CalculateChecksum().encode()
+        self.hdr.size = len(self.SerializeFields())
 
     def CalculateChecksum(self) -> str:
-        dataBuf = self.Serialize()
+        dataBuf = self.SerializeFields()
         checksum = hashlib.sha256(dataBuf).hexdigest()[:4]
         return checksum
 
@@ -88,6 +103,7 @@ class NetNode:
         self.port = port
         self.peers = []
         self.clients = []
+        self.chain = Chain()
     
     def createServer(self):
         print("Starting server")
@@ -95,7 +111,7 @@ class NetNode:
         msg.highestHash = hashlib.sha256(b'hello').hexdigest().encode()
         msg.stoppingHash = b'0' * 64
         msg.SetChecksumSize()
-        sendData = msg.SerializeFull()
+        sendData = msg.Serialize()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((self.address, self.port))
@@ -119,14 +135,18 @@ class NetNode:
                 data = s.recv(1024)
                 print('Buf: ', data[:12], data[:12] == b'litedocchain')
                 if data[:12] == b'litedocchain':
-                    hdr = MessageHeader.unpackHdrInto(data[:22])
+                    hdr = MessageHeader(0)
+                    hdr = hdr.Deserialize(data[:22])
                     print(hdr)
                     print(data[23:])
                     calcChecksum = hashlib.sha256(data[22:]).hexdigest().encode()[:4]
-                    print('Checksum: ', calcChecksum, 'Hdr Checksum: ', hdr.checksum)
+                    print('Checksum: ', calcChecksum, ', Hdr Checksum: ', hdr.checksum)
                     assert calcChecksum == hdr.checksum
 
 n = NetNode("localhost")
+b1 = Block()
+n.chain.localChain.append(Block())
+
 serverThread = threading.Thread(target=n.createServer)
 serverThread.start()
 time.sleep(1)
