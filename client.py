@@ -35,12 +35,12 @@ if __name__ == "__main__":
     # if args.keyfile is None or args.keyfile == DEFAULT_KEY_FILE:
     #     run()
     priv_key = ReadPrivateKeyFromFile()
-    sig1 = FileSig(priv_key, args.file)
+    # sig1 = FileSig(priv_key, args.file)
     sig2 = FileSigInc(priv_key, args.file)
-    print(len(sig1))
+    # print(len(sig1))
     print(sig2)
     
     with open(args.file, 'rb') as file:
         data = file.read()
-        print(VerifySig(priv_key, sig1, data))
+        print(VerifySig(priv_key, sig2, data))
     
