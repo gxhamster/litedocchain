@@ -5,5 +5,5 @@ __all__ = [
     'Chain'
 ]
 
-from block import *
-from chain import *
+from .block import *
+from .chain import *

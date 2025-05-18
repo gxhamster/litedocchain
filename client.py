@@ -85,7 +85,7 @@ def run():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog='client',
-        description='Client program to connect to litedocchain network',
+        description="""Client program to connect to litedocchain network""",
     )
     parser.add_argument('-g', '--generate', action='store_true', help='generate a new private key')
     parser.add_argument('-k', '--keyfile', required=False, nargs='?', default=DEFAULT_KEY_FILE)

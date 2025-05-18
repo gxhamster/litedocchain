@@ -1,6 +1,5 @@
-from serialization.serialize import Serializable
 from primitives.block import *
-from primitives.chain import *
+from primitives.chain import Chain
 
 if __name__ == "__main__":
   chain = Chain()

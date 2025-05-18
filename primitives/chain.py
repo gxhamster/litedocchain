@@ -1,5 +1,5 @@
 import time
-from primitives.block import *
+from primitives.block import Block, VERSION
 
 class Chain:
   def __init__(self) -> None:

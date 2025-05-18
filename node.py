@@ -3,8 +3,9 @@ import socket
 import hashlib
 import threading
 import time
-from block import Chain, Block
 from serialization.serialize import Serializable
+from primitives.block import *
+from primitives.chain import *
 
 class MessageHeader(Serializable):
     """ Every message sent on the blockchain network will have a header
@@ -46,29 +47,24 @@ class GetBlocksMsg(Serializable):
         self.hdr: MessageHeader = MessageHeader(1)
         self.highestHash: bytes = b''  # 64 bytes
         self.stoppingHash: bytes = b'' # 64 bytes
-
-    def SerializeFields(self) -> bytes:
-        return self.struct.pack(self.highestHash, self.stoppingHash)
     
     def Serialize(self) -> bytes:
-        self.hdr
-        buf = bytearray(self.hdr.Serialize())
-        buf.extend(self.SerializeFields())
-        return bytes(buf)
+        return self.hdr.Serialize() + self.struct.pack(self.highestHash, self.stoppingHash)
     
     def Deserialize(self, buffer: bytes):
-        self.hdr = self.hdr.Deserialize(buffer[:22])
-        h, s = self.struct.unpack(buffer[22:])
+        hdrSize = self.hdr.struct.size
+        self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
+        h, s = self.struct.unpack(buffer[hdrSize:])
         self.highestHash = h
         self.stoppingHash = s
         return self
             
     def SetChecksumSize(self) -> None:
         self.hdr.checksum = self.CalculateChecksum()
-        self.hdr.size = len(self.SerializeFields())
+        self.hdr.size = len(self.struct.pack(self.highestHash, self.stoppingHash))
 
     def CalculateChecksum(self) -> bytes:
-        dataBuf = self.SerializeFields()
+        dataBuf = self.struct.pack(self.highestHash, self.stoppingHash)
         checksum = hashlib.sha256(dataBuf).digest()[:MessageHeader.CHECKSUM_LEN]
         return checksum
 
@@ -87,6 +83,7 @@ class NetNode:
         self.peers = []
         self.clients = []
         self.chain = Chain()
+        self.chain.CreateGenesisBlock()
     
     def createServer(self):
         print("Starting server")
@@ -104,10 +101,7 @@ class NetNode:
                 print(f"Connected by {addr}")
                 while True:
                     data = conn.recv(1024)
-                    if not data or data.startswith(b"quit"):
-                        break
                     print(data)
-                    conn.sendall(sendData)
     
     def createClient(self):
         print("Starting client")
@@ -116,17 +110,7 @@ class NetNode:
             s.sendall(b"Hello, world")
             while True:
                 data = s.recv(1024)
-                print('Buf: ', data[:12], data[:12] == b'litedocchain')
-                if data[:12] == b'litedocchain':
-                    hdr = MessageHeader(0)
-                    hdr = hdr.Deserialize(data[:22])
-                    msg = GetBlocksMsg()
-                    print(msg.Deserialize(data))
-                    print(hdr)
-                    print(data[23:])
-                    calcChecksum = hashlib.sha256(data[22:]).digest()[:4]
-                    print('Checksum: ', calcChecksum, ', Hdr Checksum: ', hdr.checksum)
-                    assert calcChecksum == hdr.checksum
+                print(data)
 
 if __name__ == "__main__":
     n = NetNode("localhost")
@@ -138,18 +122,4 @@ if __name__ == "__main__":
     time.sleep(1)
     n.createClient()
 
-# m = MessageHeader(2)
-# m.size = 128
-# m.checksum = b'055'
-# print(m.packHdr())
 
-# msg = GetBlocksMsg()
-# msg.highestHash = hashlib.sha256(b'hello').hexdigest().encode()
-# msg.stoppingHash = b'0' * 64
-# msg.SetChecksumSize()
-# buf = msg.SerializeFull()
-# print(buf)
-# print(msg.Load(buf))
-
-
-# print()
