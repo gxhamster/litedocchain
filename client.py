@@ -97,7 +97,7 @@ if __name__ == "__main__":
     priv_key = ReadPrivateKeyFromFile()
     sig1 = FileSig(priv_key, args.file)
     sig2 = FileSigInc(priv_key, args.file)
-    print(sig1)
+    print(len(sig1))
     print(sig2)
     
     with open(args.file, 'rb') as file:
