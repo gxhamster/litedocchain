@@ -101,6 +101,8 @@ class NetNode:
                 print(f"Connected by {addr}")
                 while True:
                     data = conn.recv(1024)
+                    if data == b'':
+                        break
                     print(data)
     
     def createClient(self):
@@ -110,6 +112,8 @@ class NetNode:
             s.sendall(b"Hello, world")
             while True:
                 data = s.recv(1024)
+                if data == b'':
+                    break
                 print(data)
 
 if __name__ == "__main__":
