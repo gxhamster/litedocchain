@@ -1,8 +1,12 @@
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from typing import cast
 from hashlib import sha256
 
+"""
+Private key:    32 byte
+Public key:     32 byte
+"""
 
 DEFAULT_KEY_FILE="key.pem"
 def GeneratePrivateKey():
@@ -39,13 +43,31 @@ def FileSig(private_key: Ed25519PrivateKey, filePath: str) -> bytes:
 
 def VerifySig(private_key: Ed25519PrivateKey, signature: bytes, fileData: bytes) -> bool:
         public_key = private_key.public_key()
+        print('Priv key len:', len(private_key.private_bytes_raw()))
+        print('Pub key len:', len(public_key.public_bytes_raw()))
         try:
             hashedFileData = sha256(fileData)
             public_key.verify(signature, hashedFileData.digest())
             return True
         except:
             return False
-        
+
+def VerifySigWithFileHash(private_key: Ed25519PrivateKey, signature: bytes, sha256FileHash: bytes) -> bool:
+    public_key = private_key.public_key()
+    try:
+        public_key.verify(signature, sha256FileHash)
+        return True
+    except:
+        return False
+    
+def VerifySigPubkey(pubkey: bytes, signature: bytes, sha256FileHash: bytes) -> bool:
+    publicKey = Ed25519PublicKey.from_public_bytes(pubkey)
+    try:
+        publicKey.verify(signature, sha256FileHash)
+        return True
+    except:
+        return False
+
 def FileSigInc(private_key: Ed25519PrivateKey, filePath: str) -> bytes:
     """ Computes signature by incrementally applying sha256 on each read
     on a buffered reader. Preffered for larger file (above 4MB).

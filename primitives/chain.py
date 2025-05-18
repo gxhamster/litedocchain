@@ -2,6 +2,9 @@ import time
 from primitives.block import Block, VERSION
 
 class Chain:
+  """ Immuatable list of Blocks. All chains must call CreateGenesisBlock
+  before adding new blocks into the chain
+  """
   def __init__(self) -> None:
     self.localChain: list[Block] = []
   
