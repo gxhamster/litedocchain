@@ -36,18 +36,19 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--file', help='file to store on chain')
     parser.add_argument('-a', '--addr', help='litedocchain node address')
     parser.add_argument('-p', '--port', type=int, help='litedocchain node port')
+    parser.add_argument('--verify', action='store_true', help='verify a file exists in the chain')
     args = parser.parse_args()
     print(args)
-    # if args.keyfile is None or args.keyfile == DEFAULT_KEY_FILE:
-    #     run()
+    if args.verify:
+        raise NotImplementedError("Verifcation is not yet implemented")
+    
     priv_key = ReadPrivateKeyFromFile()
-    # sig1 = FileSig(priv_key, args.file)
     sig2 = FileSigInc(priv_key, args.file)
     
     fileHash = b''
     with open(args.file, 'rb') as file:
         data = file.read()
-        print(VerifySig(priv_key, sig2, data))
+        VerifySig(priv_key, sig2, data)
         fileHash = sha256(data).digest()
     
     if args.addr and args.port:
@@ -61,7 +62,6 @@ if __name__ == "__main__":
             block.hdr.hash =  block.hdr.CalculateHash(block.signature + block.fileHash + block.pubkey)
             if not block.IsBlockValid(check_sig=True):
                 raise AssertionError("Block is not valid")
-            print(block)
             
             msg = BlockDataMsg()
             msg.block = block
@@ -69,9 +69,8 @@ if __name__ == "__main__":
             msg.hdr.size = len(msg.block.Serialize())
             
             s.sendall(msg.Serialize())
-            while True:
-                data = s.recv(1024)
-                if data == b'':
-                    break
-                print(data)
+            print(f"Sending file {args.file} to node {s.getpeername()}")
+            data = s.recv(1024)
+            
+            s.close()
         

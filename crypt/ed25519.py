@@ -43,8 +43,6 @@ def FileSig(private_key: Ed25519PrivateKey, filePath: str) -> bytes:
 
 def VerifySig(private_key: Ed25519PrivateKey, signature: bytes, fileData: bytes) -> bool:
         public_key = private_key.public_key()
-        print('Priv key len:', len(private_key.private_bytes_raw()))
-        print('Pub key len:', len(public_key.public_bytes_raw()))
         try:
             hashedFileData = sha256(fileData)
             public_key.verify(signature, hashedFileData.digest())
