@@ -3,9 +3,20 @@ from serialization.serialize import Serializable
 from primitives.block import Block
 from struct import Struct
 from typing import Self
+from enum import IntEnum
 import hashlib
 
 MAGIC_HDR_VALUE = b'litedocchain'
+
+
+class MsgType(IntEnum):
+    """ Every MsgHdr has a command field which is a MsgType.
+    Use this field to figure out what kind of message it is.
+    """
+    NOMSG               = 0
+    GETBLOCKMSG         = 1
+    BLOCKDATAMSG        = 2
+    
 
 class MsgHdr(Serializable):
     """ Every message sent on the blockchain network will have a header
@@ -15,10 +26,10 @@ class MsgHdr(Serializable):
     """
     struct = Struct('>12sHI4s')
     CHECKSUM_LEN = 4
-    def __init__(self, command: int = 0) -> None:
+    def __init__(self, command: MsgType = MsgType.NOMSG) -> None:
         super().__init__()
         self.magic: bytes = MAGIC_HDR_VALUE # 12 bytes (char)
-        self.command: int = command         # 02 bytes (short)
+        self.command: MsgType = command     # 02 bytes (short)
         self.size: int = 0                  # 04 bytes (int) Size of the payload. Bitcoin max=32MB
         self.checksum: bytes = b''          # 04 bytes (char) 4 byte sha256 of payload
             
@@ -35,17 +46,13 @@ class MsgHdr(Serializable):
         return self
 
     def __repr__(self) -> str:
-        return f"""MessageHeader(
-    magic={self.magic},
-    command={self.command},
-    size={self.size},
-    checksum={self.checksum})"""
+        return f"""MsgHdr(magic={self.magic}, command={self.command}, size={self.size}, checksum={self.checksum})"""
 
 class GetBlocksMsg(Serializable):
     struct = Struct('>32s32s')   
     def __init__(self) -> None:
         super().__init__()
-        self.hdr: MsgHdr = MsgHdr(1)
+        self.hdr: MsgHdr = MsgHdr(MsgType.GETBLOCKMSG)
         self.highestHash: bytes = b''  # 32 bytes
         self.stoppingHash: bytes = b'' # 32 bytes
     
@@ -71,16 +78,13 @@ class GetBlocksMsg(Serializable):
 
     
     def __repr__(self) -> str:
-        return f"""GetBlocksMsg(
-    {self.hdr},
-    highestHash={self.highestHash},
-    stoppingHash={self.stoppingHash})"""
+        return f"""GetBlocksMsg({self.hdr}, highestHash={self.highestHash}, stoppingHash={self.stoppingHash})"""
 
 class BlockDataMsg(Serializable):
     struct = Block.struct
     def __init__(self) -> None:
         super().__init__()
-        self.hdr: MsgHdr = MsgHdr(2)
+        self.hdr: MsgHdr = MsgHdr(MsgType.BLOCKDATAMSG)
         self.block: Block = Block()
         
     def Serialize(self) -> bytes:
@@ -96,3 +100,6 @@ class BlockDataMsg(Serializable):
         dataBuf = self.block.Serialize()
         checksum = hashlib.sha256(dataBuf).digest()[:MsgHdr.CHECKSUM_LEN]
         return checksum
+    
+    def __repr__(self) -> str:
+        return f"BlockDataMsg(hdr={self.hdr}, block={self.block}"
