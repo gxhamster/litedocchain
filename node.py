@@ -1,10 +1,9 @@
 import socket
-import hashlib
-import threading
+import asyncio
 import time
 from primitives.block import Block
 from primitives.chain import Chain
-from net.message import GetBlocksMsg, MAGIC_HDR_VALUE, MsgHdr
+from net.message import MAGIC_HDR_VALUE, MsgHdr, BlockDataMsg, MsgType
 
 class NetNode:
     def __init__(self, address: str, port: int = 3333) -> None:
@@ -13,50 +12,64 @@ class NetNode:
         self.peers = []
         self.clients = []
         self.chain = Chain()
-        self.chain.CreateGenesisBlock()
-    
-    def createServer(self):
-        print("Starting server")
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((self.address, self.port))
-            s.listen()
-            conn, addr = s.accept()
-            print(conn, addr)
-            with conn:
-                print(f"Connected by {addr}")
-                while True:
-                    data = conn.recv(1024)
-                    if data == b'':
-                        continue
-                    if data.startswith(MAGIC_HDR_VALUE):
-                        hdrSize = MsgHdr.struct.size
-                        hdr = MsgHdr(2)
-                        hdr = hdr.Deserialize(data[:hdrSize])
-                        print(hdr)
+        
+    async def asyncServerCallback(self, reader, writer):
+        data = await reader.read(2048)
+        addr = writer.get_extra_info('peername')
+        if data == b'':
+            pass
+        if data.startswith(MAGIC_HDR_VALUE):
+            hdrSize = MsgHdr.struct.size
+            hdr = MsgHdr()
+            hdr = hdr.Deserialize(data[:hdrSize])
+            if hdr.command == MsgType.NOMSG:
+                print(hdr.command)
+            elif hdr.command == MsgType.GETBLOCKMSG:
+                print(hdr.command)
+            elif hdr.command == MsgType.BLOCKDATAMSG:
+                # Received blocks from clients
+                # Verify the block contents are correct
+                # Mine the block
+                # Add the block to localchain
+                # Broadcast block to other nodes if available
+                print(hdr.command)
+                bMsg = BlockDataMsg()
+                payload = bMsg.Deserialize(data)
+                if not payload.block.IsBlockValid(check_sig=True):
+                    print("Received an invalid block from a client!")
+                else:
+                    payload.block.MineBlock()
+                    self.chain.AddBlockToChain(payload.block)
+                    if not self.chain.CheckChainIntegrity():
+                        print("Chain integrity checks failed")
+                        # Remove block from chain
+                        self.chain.localChain.pop()
+                    else:
+                        writer.write(f"Added block {self.chain.GetLastBlock().hdr.hash}".encode())
                     
                     
-                    print(data)
-    
-    def createClient(self):
-        print("Starting client")
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.address, self.port))
-            s.sendall(b"Hello, world")
-            while True:
-                data = s.recv(1024)
-                if data == b'':
-                    break
-                print(data)
+            else:
+                print("Invalid MsgType")
+                assert "Invalid MsgType" == 0
 
+        writer.write(data)
+        await writer.drain()
+        await writer.wait_closed()
+    
+    async def asyncServer(self):
+        server = await asyncio.start_server(
+        self.asyncServerCallback, self.address, self.port)
+
+        addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+        print(f'Serving on {addrs}')
+
+        async with server:
+            await server.serve_forever()
+            
+    def runAsyncServer(self):
+        asyncio.run(self.asyncServer())
+    
 if __name__ == "__main__":
     n = NetNode("localhost")
-    b1 = Block()
-    n.chain.localChain.append(Block())
-
-    serverThread = threading.Thread(target=n.createServer)
-    serverThread.start()
-    time.sleep(1)
-    # n.createClient()
-
-
+    n.chain.CreateGenesisBlock()
+    n.runAsyncServer()

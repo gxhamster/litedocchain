@@ -42,11 +42,7 @@ class BlockHeader(Serializable):
     return hashlib.sha256(buffer).digest()
   
   def __repr__(self):
-     return f"""BlockHeader(version={self.version},
-  time={self.time},
-  prev={self.hashPrevBlock},
-  hash={self.hash}, 
-  nonce={self.nonce})"""
+     return f"""BlockHeader(version={self.version}, time={self.time}, prev={self.hashPrevBlock}, hash={self.hash}, nonce={self.nonce})"""
 
 class Block(Serializable):
   """ For simplicty in this project, we will consider one document
@@ -78,7 +74,8 @@ class Block(Serializable):
   def MineBlock(self) -> bytes:
     """ Find a nonce value that gives us a hash of some pattern.
     Bitcoin accepts a hash starting with 10 zeros (could be more).
-    We will use a pattern that gives 3 zeros just to make it faster
+    We will use a pattern that gives 3 zeros just to make it faster.
+    Also sets the new hash to the block.
     """
     tempHash = self.hdr.CalculateHash(self.signature + self.fileHash + self.pubkey)
     difficulty = 2
@@ -97,11 +94,7 @@ class Block(Serializable):
     return True
   
   def __repr__(self) -> str:
-    return f"""Block({self.hdr}
-  signature={self.signature},
-  fileHash={self.fileHash},
-  pubkey={self.pubkey}
-)"""
+    return f"""Block({self.hdr}, signature={self.signature}, fileHash={self.fileHash}, pubkey={self.pubkey})"""
 
 
       
