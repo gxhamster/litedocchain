@@ -10,7 +10,8 @@ MAGIC_HDR_VALUE = b'litedocchain'
 class MsgHdr(Serializable):
     """ Every message sent on the blockchain network will have a header
     with the metadata of the payload. Command field will be used to identify
-    which type of msg packet.
+    which type of msg packet. Make sure to set the checksum and size of the payload in 
+    the hdr before sending the msg on the wire
     """
     struct = Struct('>12sHI4s')
     CHECKSUM_LEN = 4

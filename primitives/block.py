@@ -13,7 +13,7 @@ class BlockHeader(Serializable):
 
   def SetNull(self):
     super().__init__()
-    self.version = 0                  # 1 byte char
+    self.version = VERSION            # 1 byte char
     self.time: float = 0              # 8 byte double
     self.hashPrevBlock: bytes = b''   # 32 byte string
     self.hash: bytes = b''            # 32 byte string

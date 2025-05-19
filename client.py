@@ -1,5 +1,9 @@
 from crypt.ed25519 import *
+from net.message import BlockDataMsg
+from primitives.block import Block
+from hashlib import sha256
 import argparse
+import socket
                     
 def run():
     private_key = ReadPrivateKeyFromFile()
@@ -30,6 +34,8 @@ if __name__ == "__main__":
     parser.add_argument('-g', '--generate', action='store_true', help='generate a new private key')
     parser.add_argument('-k', '--keyfile', required=False, nargs='?', default=DEFAULT_KEY_FILE)
     parser.add_argument('-f', '--file', help='file to store on chain')
+    parser.add_argument('-a', '--addr', help='litedocchain node address')
+    parser.add_argument('-p', '--port', type=int, help='litedocchain node port')
     args = parser.parse_args()
     print(args)
     # if args.keyfile is None or args.keyfile == DEFAULT_KEY_FILE:
@@ -37,10 +43,35 @@ if __name__ == "__main__":
     priv_key = ReadPrivateKeyFromFile()
     # sig1 = FileSig(priv_key, args.file)
     sig2 = FileSigInc(priv_key, args.file)
-    # print(len(sig1))
-    print(sig2)
     
+    fileHash = b''
     with open(args.file, 'rb') as file:
         data = file.read()
         print(VerifySig(priv_key, sig2, data))
+        fileHash = sha256(data).digest()
     
+    if args.addr and args.port:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((args.addr, args.port))
+            print(f"Connected to: {s.getpeername()}")
+            block = Block()
+            block.pubkey = priv_key.public_key().public_bytes_raw()
+            block.signature = sig2
+            block.fileHash = fileHash
+            block.hdr.hash =  block.hdr.CalculateHash(block.signature + block.fileHash + block.pubkey)
+            if not block.IsBlockValid(check_sig=True):
+                raise AssertionError("Block is not valid")
+            print(block)
+            
+            msg = BlockDataMsg()
+            msg.block = block
+            msg.hdr.checksum = msg.CalculateChecksum()
+            msg.hdr.size = len(msg.block.Serialize())
+            
+            s.sendall(msg.Serialize())
+            while True:
+                data = s.recv(1024)
+                if data == b'':
+                    break
+                print(data)
+        

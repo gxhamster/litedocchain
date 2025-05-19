@@ -4,7 +4,7 @@ import threading
 import time
 from primitives.block import Block
 from primitives.chain import Chain
-from net.message import GetBlocksMsg
+from net.message import GetBlocksMsg, MAGIC_HDR_VALUE, MsgHdr
 
 class NetNode:
     def __init__(self, address: str, port: int = 3333) -> None:
@@ -17,11 +17,6 @@ class NetNode:
     
     def createServer(self):
         print("Starting server")
-        msg = GetBlocksMsg()
-        msg.highestHash = hashlib.sha256(b'hello').digest()
-        msg.stoppingHash = b'0' * 32
-        msg.SetChecksumSize()
-        sendData = msg.Serialize()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((self.address, self.port))
@@ -33,7 +28,12 @@ class NetNode:
                 while True:
                     data = conn.recv(1024)
                     if data == b'':
-                        break
+                        continue
+                    if data.startswith(MAGIC_HDR_VALUE):
+                        hdrSize = MsgHdr.struct.size
+                        hdr = MsgHdr(2)
+                        hdr = hdr.Deserialize(data[:hdrSize])
+                        print(hdr)
                     
                     
                     print(data)
