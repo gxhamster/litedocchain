@@ -46,7 +46,7 @@ class Chain:
       genesis = Block()
       genesis.hdr.version = VERSION
       genesis.signature = b'genesis'
-      genesis.hdr.time = time.time()
+      genesis.hdr.time = 0
       genesis.hdr.hashPrevBlock = b'0' * 32
       genesis.hdr.hash = genesis.hdr.CalculateHash(genesis.signature)
       genesis.MineBlock()
@@ -71,3 +71,6 @@ class Chain:
   
   def __iter__(self):
     return self.localChain.__iter__()
+  
+  def __len__(self):
+    return len(self.localChain)
