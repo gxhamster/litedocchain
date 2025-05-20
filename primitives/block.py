@@ -35,7 +35,7 @@ class BlockHeader(Serializable):
         self.nonce = n
         return self
 
-    # Calculate the hash for all the block contents
+    # Calculate the hash for all the block contents (header contents except the hash)
     def CalculateHash(self, blockData: bytes = b"") -> bytes:
         buffer = bytearray()
         packStructNoHash = Struct(">Bd32sI")

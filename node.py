@@ -4,7 +4,7 @@ import threading
 import argparse
 from primitives.block import Block
 from primitives.chain import Chain
-from net.message import MAGIC_HDR_VALUE, MsgHdr, BlockDataMsg, MsgType, GetBlocksMsg
+from net.message import MAGIC_HDR_VALUE, MsgHdr, BlockDataMsg, MsgType, GetBlocksMsg, InvMsg
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
                     datefmt='%m/%d/%Y %I:%M:%S %p',
@@ -50,10 +50,14 @@ class NetNode:
                             if idx > startIdx and idx <= endIdx:
                                 blocksToSend.append(block)
                             
-                        logging.debug(f"MsgType.GETBLOCKMSG: Sending {len(blocksToSend)}")
                         # Send an Inv message with all the serialized blocks packed together
-                            
-                
+                        invMsg = InvMsg()
+                        invMsg.blockCount = len(blocksToSend)
+                        invMsg.blocks = blocksToSend
+                        logging.debug(f"MsgType.InvMsg: [node -> peer] {len(blocksToSend)}")
+                        writer.write(invMsg.Serialize())
+                        await writer.drain()
+                        
             elif hdr.command == MsgType.BLOCKDATAMSG:
                 # Received blocks from clients
                 # Verify the block contents are correct
@@ -74,9 +78,6 @@ class NetNode:
                         # Remove block from chain
                         self.chain.localChain.pop()
                     else:
-                        writer.write(
-                            f"Added block {self.chain.GetLastBlock().hdr.hash}".encode()
-                        )
                         logging.debug(f"Added block: {self.chain.GetLastBlock().hdr.hash.hex()}")
             else:
                 logging.debug("Invalid MsgType")
@@ -118,9 +119,30 @@ class NetNode:
         peerReaderSock = self.peers[-1][0] 
         peerWriterSock.write(getBlockMsg.Serialize())
         logging.debug(f"Sent GetBlockMsg to {peerWriterSock.get_extra_info("peername")}")
-        data = peerReaderSock.read()
+        data = await peerReaderSock.read(2048)
         if data == b'':
             return
+        elif data.startswith(MAGIC_HDR_VALUE):
+            hdrSize = MsgHdr.struct.size
+            hdr = MsgHdr()
+            hdr = hdr.Deserialize(data[:hdrSize])
+            if hdr.command == MsgType.INVMSG:
+                logging.debug("Received MsgType.InvMsg")
+                invMsg = InvMsg()
+                invMsg.Deserialize(data)
+                for block in invMsg.blocks:
+                    # Find the block which matches the hashPrev
+                    targetIdx = -1
+                    for idx, localBlock in enumerate(self.chain):
+                        if localBlock.hdr.hash == block.hdr.hashPrevBlock:
+                            targetIdx = idx
+                            break
+                    if targetIdx == -1:
+                        logging.debug(f"Cannot add block: {block.hdr.hash.hex()}")
+                    else:
+                        self.chain.localChain.insert(targetIdx + 1, block)
+                        logging.debug(f"Added block: {block.hdr.hash.hex()}")
+                        self.chain.CheckChainIntegrity()
         
         await writer.wait_closed()
 

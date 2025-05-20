@@ -122,14 +122,13 @@ class InvMsg(Serializable):
         
     def Serialize(self) -> bytes:
         buffer = bytearray()
-        buffer.extend(self.hdr.Serialize())
         buffer.extend(pack('>I', self.blockCount))
         for block in self.blocks:
             buffer.extend(block.Serialize())
+        self.hdr.checksum =  hashlib.sha256(buffer).digest()[: MsgHdr.CHECKSUM_LEN]
+        self.hdr.size = len(buffer)
+        return self.hdr.Serialize() + bytes(buffer)
         
-        return bytes(buffer)
-        
-    
     def Deserialize(self, buffer: bytes) -> Self:
         self.blocks.clear()
         hdrSize = self.hdr.struct.size
