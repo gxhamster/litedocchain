@@ -18,6 +18,7 @@ class MsgType(IntEnum):
     BLOCKDATAMSG = 2
     INVMSG = 3
     VERSION = 4
+    ACK = 5
 
 
 class MsgHdr(Serializable):
@@ -188,4 +189,22 @@ class VersionMsg(Serializable):
     def __repr__(self) -> str:
         return f"VersionMsg(hdr={self.hdr}, type={self.connType}, addr={self.connAddr}, port={self.connPort})"
         
-        
+class AckMsg(Serializable):
+    struct = Struct('>I')
+    def __init__(self) -> None:
+        super().__init__()
+        self.hdr: MsgHdr = MsgHdr(MsgType.ACK)
+        self.nonce: int = 0 # To just pass any value with the ACK msg (if needed)
+    
+    def Serialize(self) -> bytes:
+        fields = self.struct.pack(self.nonce)
+        self.hdr.checksum = hashlib.sha256(fields).digest()[: MsgHdr.CHECKSUM_LEN]
+        self.hdr.size = len(fields)
+        return self.hdr.Serialize() + fields
+    
+    def Deserialize(self, buffer: bytes) -> Self:
+        hdrSize = self.hdr.struct.size
+        self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
+        nonce, = self.struct.unpack(buffer[hdrSize:])
+        self.nonce = nonce
+        return self
