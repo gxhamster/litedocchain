@@ -1,5 +1,5 @@
 from crypt.ed25519 import *
-from net.message import BlockDataMsg
+from net.message import BlockDataMsg, VersionMsg, VersionConnType
 from primitives.block import Block
 from hashlib import sha256
 import argparse
@@ -52,9 +52,16 @@ if __name__ == "__main__":
         fileHash = sha256(data).digest()
     
     if args.addr and args.port:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((args.addr, args.port))
-            print(f"Connected to: node_addr={s.getpeername()[0]}, node_port={s.getpeername()[1]}")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((args.addr, args.port))
+            
+            verMsg = VersionMsg()
+            verMsg.connType = VersionConnType.CLIENT
+            verMsg.connAddr = socket.inet_aton(sock.getsockname()[0])
+            verMsg.connPort = sock.getsockname()[1]
+            sock.sendall(verMsg.Serialize())
+            
+            print(f"Connected to: node_addr={sock.getpeername()[0]}, node_port={sock.getpeername()[1]}")
             block = Block()
             block.pubkey = priv_key.public_key().public_bytes_raw()
             block.signature = sig2
@@ -68,11 +75,11 @@ if __name__ == "__main__":
             msg.hdr.checksum = msg.CalculateChecksum()
             msg.hdr.size = len(msg.block.Serialize())
             
-            s.sendall(msg.Serialize())
-            print(f"Sending: file='{args.file}', node={s.getpeername()[0]}")
-            data = s.recv(1024)
+            sock.sendall(msg.Serialize())
+            print(f"Sending: file='{args.file}', node={sock.getpeername()[0]}")
+            data = sock.recv(1024)
             # TODO: Should wait for some kind of ACK from the node on
             # what happened to the block sent.
             
-            s.close()
+            sock.close()
         

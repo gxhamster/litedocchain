@@ -157,17 +157,17 @@ class VersionConnType(IntEnum):
     CLIENT = 1  
     NODE = 2
 
-class Version(Serializable):
+class VersionMsg(Serializable):
     """ A version packet is exchanged with node/client or node/peer
     whenever a connection is made. Helps to distinguish what kind of connection
     we are making.
     """
-    struct = Struct('>BII')
+    struct = Struct('>B4sI')
     def __init__(self) -> None:
         super().__init__()
         self.hdr: MsgHdr = MsgHdr(MsgType.VERSION)
         self.connType: VersionConnType = VersionConnType.UNKNOWN # 1 byte 
-        self.connAddr: int = 0  # 4 byte (int) Convert string addresses using socket.inet_aton
+        self.connAddr: bytes = b'' # 4 byte Convert string addresses using socket.inet_aton
         self.connPort: int = 0  # 4 byte (int)
         
     def Serialize(self) -> bytes:
@@ -184,5 +184,8 @@ class Version(Serializable):
         self.connAddr = addr
         self.connPort = port
         return self
+    
+    def __repr__(self) -> str:
+        return f"VersionMsg(hdr={self.hdr}, type={self.connType}, addr={self.connAddr}, port={self.connPort})"
         
         
