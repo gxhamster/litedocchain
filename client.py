@@ -54,7 +54,7 @@ if __name__ == "__main__":
     if args.addr and args.port:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((args.addr, args.port))
-            print(f"Connected to: {s.getpeername()}")
+            print(f"Connected to: node_addr={s.getpeername()[0]}, node_port={s.getpeername()[1]}")
             block = Block()
             block.pubkey = priv_key.public_key().public_bytes_raw()
             block.signature = sig2
@@ -69,8 +69,10 @@ if __name__ == "__main__":
             msg.hdr.size = len(msg.block.Serialize())
             
             s.sendall(msg.Serialize())
-            print(f"Sending file {args.file} to node {s.getpeername()}")
+            print(f"Sending: file='{args.file}', node={s.getpeername()[0]}")
             data = s.recv(1024)
+            # TODO: Should wait for some kind of ACK from the node on
+            # what happened to the block sent.
             
             s.close()
         

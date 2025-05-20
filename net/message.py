@@ -17,6 +17,7 @@ class MsgType(IntEnum):
     GETBLOCKMSG = 1
     BLOCKDATAMSG = 2
     INVMSG = 3
+    VERSION = 4
 
 
 class MsgHdr(Serializable):
@@ -150,5 +151,38 @@ class InvMsg(Serializable):
     def __repr__(self) -> str:
         return f"InvMsg(hdr={self.hdr}, blockCount={self.blockCount}, blocks={self.blocks})"
     
+
+class VersionConnType(IntEnum):
+    UNKNOWN = 0
+    CLIENT = 1  
+    NODE = 2
+
+class Version(Serializable):
+    """ A version packet is exchanged with node/client or node/peer
+    whenever a connection is made. Helps to distinguish what kind of connection
+    we are making.
+    """
+    struct = Struct('>BII')
+    def __init__(self) -> None:
+        super().__init__()
+        self.hdr: MsgHdr = MsgHdr(MsgType.VERSION)
+        self.connType: VersionConnType = VersionConnType.UNKNOWN # 1 byte 
+        self.connAddr: int = 0  # 4 byte (int) Convert string addresses using socket.inet_aton
+        self.connPort: int = 0  # 4 byte (int)
+        
+    def Serialize(self) -> bytes:
+        fields = self.struct.pack(self.connType, self.connAddr, self.connPort)
+        self.hdr.checksum = hashlib.sha256(fields).digest()[: MsgHdr.CHECKSUM_LEN]
+        self.hdr.size = len(fields)
+        return self.hdr.Serialize() + fields
     
-    
+    def Deserialize(self, buffer: bytes) -> Self:
+        hdrSize = self.hdr.struct.size
+        self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
+        type, addr, port = self.struct.unpack(buffer[hdrSize:])
+        self.connType = type
+        self.connAddr = addr
+        self.connPort = port
+        return self
+        
+        

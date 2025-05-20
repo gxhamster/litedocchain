@@ -23,7 +23,7 @@ class NetNode:
         addr = writer.get_extra_info("peername")
         logging.debug(f"Connected by: {addr}")
         if data == b"":
-            pass
+            logging.debug("Peer/Client probably sent an EOF")
         if data.startswith(MAGIC_HDR_VALUE):
             hdrSize = MsgHdr.struct.size
             hdr = MsgHdr()
@@ -73,12 +73,18 @@ class NetNode:
                     payload.block.MineBlock()
                     logging.debug(f"Mined block: nonce = {payload.block.hdr.nonce}")
                     self.chain.AddBlockToChain(payload.block)
-                    if not self.chain.CheckChainIntegrity():
+                    if not self.chain.CheckChainIntegrity(check_sig=True):
                         logging.debug("Chain integrity checks failed")
                         # Remove block from chain
                         self.chain.localChain.pop()
                     else:
                         logging.debug(f"Added block: {self.chain.GetLastBlock().hdr.hash.hex()}")
+                        invMsg = InvMsg()
+                        invMsg.blockCount = 1
+                        invMsg.blocks.append(self.chain.GetLastBlock())
+                        logging.debug(f"MsgType.InvMsg: [node -> peer]: 1 block from client")
+                        # writer.write(invMsg.Serialize())
+                        # await writer.drain()
             else:
                 logging.debug("Invalid MsgType")
                 assert "Invalid MsgType" == 0
@@ -110,7 +116,8 @@ class NetNode:
         if len(self.peers) <= 0:
             logging.debug("No available peers yet")
             writer.close()
-            
+        
+        # Initiate the IBD (Initial Block Download)  
         getBlockMsg = GetBlocksMsg()
         getBlockMsg.highestHash = self.chain.GetLastBlock().hdr.hash
         getBlockMsg.stoppingHash = b'' * 32
@@ -119,9 +126,11 @@ class NetNode:
         peerReaderSock = self.peers[-1][0] 
         peerWriterSock.write(getBlockMsg.Serialize())
         logging.debug(f"Sent GetBlockMsg to {peerWriterSock.get_extra_info("peername")}")
+        # Note(iyaan): Maybe hardcoding the reading size is not ideal
+        # What happens when we are reading a large InvMsg?
         data = await peerReaderSock.read(2048)
         if data == b'':
-            return
+            logging.debug("Server probably sent an EOF")
         elif data.startswith(MAGIC_HDR_VALUE):
             hdrSize = MsgHdr.struct.size
             hdr = MsgHdr()
@@ -142,7 +151,7 @@ class NetNode:
                     else:
                         self.chain.localChain.insert(targetIdx + 1, block)
                         logging.debug(f"Added block: {block.hdr.hash.hex()}")
-                        self.chain.CheckChainIntegrity()
+                        self.chain.CheckChainIntegrity(check_sig=True)
         
         await writer.wait_closed()
 
