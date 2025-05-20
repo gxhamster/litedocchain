@@ -40,7 +40,7 @@ class Chain:
                     return False
             else:
                 # Genesis block case
-                if not self.localChain[idx].IsBlockValid(check_sig=check_sig):
+                if not self.localChain[idx].IsBlockValid():
                     return False
         return True
 
