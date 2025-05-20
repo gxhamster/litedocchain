@@ -150,5 +150,8 @@ if __name__ == "__main__":
         logging.debug("Cannot connect to any peer, no peer address and port")
     else:
         n.runAsyncClient(args.paddr, args.pport)
-        
-    servThread.join()
+    
+    try:
+        servThread.join()
+    except KeyboardInterrupt:
+        logging.info("Shutting down node")

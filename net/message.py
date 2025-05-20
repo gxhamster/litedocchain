@@ -1,7 +1,7 @@
 from typing import Self
 from serialization.serialize import Serializable
-from primitives.block import Block
-from struct import Struct
+from primitives.block import Block, BlockHeader
+from struct import Struct, pack, unpack
 from typing import Self
 from enum import IntEnum
 import hashlib
@@ -16,6 +16,7 @@ class MsgType(IntEnum):
     NOMSG = 0
     GETBLOCKMSG = 1
     BLOCKDATAMSG = 2
+    INVMSG = 3
 
 
 class MsgHdr(Serializable):
@@ -110,3 +111,45 @@ class BlockDataMsg(Serializable):
 
     def __repr__(self) -> str:
         return f"BlockDataMsg(hdr={self.hdr}, block={self.block}"
+
+
+class InvMsg(Serializable):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hdr: MsgHdr = MsgHdr(MsgType.INVMSG)
+        self.blockCount: int = 0        # 4 byte (int)
+        self.blocks: list[Block] = []   # Varies
+        
+    def Serialize(self) -> bytes:
+        buffer = bytearray()
+        buffer.extend(self.hdr.Serialize())
+        buffer.extend(pack('>I', self.blockCount))
+        for block in self.blocks:
+            buffer.extend(block.Serialize())
+        
+        return bytes(buffer)
+        
+    
+    def Deserialize(self, buffer: bytes) -> Self:
+        self.blocks.clear()
+        hdrSize = self.hdr.struct.size
+        self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
+        
+        blockCount, = unpack('>I', buffer[hdrSize:hdrSize+4])
+        self.blockCount = blockCount
+        blockBuf = buffer[hdrSize+4:]
+        blockSize = BlockHeader.struct.size + Block.struct.size
+        for i in range(blockCount):
+            start = i * blockSize
+            end = start + blockSize
+            buf = blockBuf[start:end]
+            block = Block()
+            block.Deserialize(buf)
+            self.blocks.append(block)
+        return self
+    
+    def __repr__(self) -> str:
+        return f"InvMsg(hdr={self.hdr}, blockCount={self.blockCount}, blocks={self.blocks})"
+    
+    
+    
