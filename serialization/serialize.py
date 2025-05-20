@@ -7,16 +7,16 @@ class Serializable(ABC):
     network.
     
     struct: (Struct) Defines the binary format of the message, not header
+    (Not recommended to call the .pack method of struct, call serialize)
     """
     struct = None 
     def __init__(self) -> None:
-        if self.struct is None:
-            raise TypeError("A derived class of Serializable must have struct")
+        pass
 
     @abstractmethod
     def Serialize(self) -> bytes:
-        pass
+        raise NotImplementedError("Need to implement Serialize")
 
     @abstractmethod
     def Deserialize(self, buffer: bytes) -> Self:
-        pass
+        raise NotImplementedError("Need to implement Deserialize")
