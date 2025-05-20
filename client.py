@@ -1,5 +1,5 @@
 from crypt.ed25519 import *
-from net.message import BlockDataMsg, VersionMsg, VersionConnType
+from net.message import BlockDataMsg, VersionMsg, VersionConnType, MAGIC_HDR_VALUE, AckMsg, MsgType, MsgHdr
 from primitives.block import Block
 from hashlib import sha256
 import argparse
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--port', type=int, help='litedocchain node port')
     parser.add_argument('--verify', action='store_true', help='verify a file exists in the chain')
     args = parser.parse_args()
-    print(args)
+    # print(args)
     if args.verify:
         raise NotImplementedError("Verifcation is not yet implemented")
     
@@ -78,8 +78,18 @@ if __name__ == "__main__":
             sock.sendall(msg.Serialize())
             print(f"Sending: file='{args.file}', node={sock.getpeername()[0]}")
             data = sock.recv(1024)
-            # TODO: Should wait for some kind of ACK from the node on
-            # what happened to the block sent.
-            
+            blockCreated = False
+            if data.startswith(MAGIC_HDR_VALUE):
+                hdrSize = MsgHdr.struct.size
+                hdr = MsgHdr()
+                hdr = hdr.Deserialize(data[:hdrSize])
+                if hdr.command == MsgType.ACK:
+                    ackMsg = AckMsg()
+                    ackMsg.Deserialize(data)
+                    if ackMsg.nonce == 12:
+                        print(f"Block created successfully on the network")
+                        blockCreated = True
+            if not blockCreated:
+                print("Something went wrong, could not create the block")
             sock.close()
         

@@ -5,7 +5,7 @@ import argparse
 import dataclasses
 import socket
 from primitives.chain import Chain
-from net.message import MAGIC_HDR_VALUE, MsgHdr, BlockDataMsg, MsgType, GetBlocksMsg, InvMsg, VersionMsg, VersionConnType
+from net.message import MAGIC_HDR_VALUE, MsgHdr, BlockDataMsg, MsgType, GetBlocksMsg, InvMsg, VersionMsg, VersionConnType, AckMsg
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
                     datefmt='%m/%d/%Y %I:%M:%S %p',
@@ -28,7 +28,7 @@ class NetNode:
         
     async def asyncServerCallback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         addr = writer.get_extra_info("peername")
-        logging.debug(f"Connected by: {addr}")
+        logging.debug(f"Connected by: addr={addr[0]}, port={addr[1]}")
         while True:
             data = await reader.read(2048)
             if data == b"":
@@ -96,7 +96,14 @@ class NetNode:
                             for peer in self.peers:
                                 peer.writer.write(invMsg.Serialize())
                                 await peer.writer.drain()
-                                logging.debug(f"MsgType.InvMsg: peer={peer.addr}, peer_port={peer.port}")
+                                logging.debug(f"Sending: msg=MsgType.InvMsg, peer={peer.addr}, peer_port={peer.port}")
+                            
+                            # Send an ACK to the client to tell that the block has
+                            # been propagated to all nodes on the network
+                            ackMsg = AckMsg()
+                            ackMsg.nonce = 12
+                            writer.write(ackMsg.Serialize())
+                            await writer.drain()
                             
                 elif hdr.command == MsgType.VERSION:
                     verMsg = VersionMsg()
@@ -116,9 +123,10 @@ class NetNode:
                     logging.debug("Invalid MsgType")
                     assert "Invalid MsgType" == 0
 
-        # writer.write(data)
-        # await writer.drain()
+        # TODO: Need to remove this socket from either list of peers
+        # or clients
         writer.close()
+        logging.debug(f"Disconnected: addr={addr[0]}, port={addr[1]}")
         await writer.wait_closed()
 
     async def asyncServer(self):
@@ -139,6 +147,7 @@ class NetNode:
         reader, writer = await asyncio.open_connection(
             peerAddr, peerPort)
         logging.debug(f"Connecting: peer_addr={peerAddr}, peer_port={peerPort}")
+        logging.debug(f"Me: addr={writer.get_extra_info("sockname")[0]}, peer_port={writer.get_extra_info("sockname")[1]}")
         self.peers.append(Conn(peerAddr, peerPort, reader, writer))
         
         if len(self.peers) <= 0:
@@ -158,7 +167,7 @@ class NetNode:
         # Initiate the IBD (Initial Block Download)  
         getBlockMsg = GetBlocksMsg()
         getBlockMsg.highestHash = self.chain.GetLastBlock().hdr.hash
-        getBlockMsg.stoppingHash = b'' * 32
+        getBlockMsg.stoppingHash = b'0' * 32
         getBlockMsg.SetChecksumSize()
         peerWriterSock = self.peers[-1].writer  # For now just select last peer
         peerReaderSock = self.peers[-1].reader
@@ -177,7 +186,9 @@ class NetNode:
                 hdr = MsgHdr()
                 hdr = hdr.Deserialize(data[:hdrSize])
                 if hdr.command == MsgType.INVMSG:
-                    logging.debug("Received: msg=MsgType.InvMsg")
+                    # TODO: Also need to send this broadcasted INV MSG to
+                    # peers except the incoming one.
+                    logging.debug(f"Received: msg=MsgType.InvMsg, peer_addr={peerAddr}, peer_port={peerPort}")
                     invMsg = InvMsg()
                     invMsg.Deserialize(data)
                     for block in invMsg.blocks:
@@ -191,9 +202,16 @@ class NetNode:
                             logging.debug(f"Cannot add block: {block.hdr.hash.hex()}")
                         else:
                             self.chain.localChain.insert(targetIdx + 1, block)
-                            logging.debug(f"Added block: {block.hdr.hash.hex()}")
                             self.chain.CheckChainIntegrity(check_sig=True)
+                            logging.debug(f"Added block: {block.hdr.hash.hex()}")
+                            peersToSend = filter(lambda peer: peer.addr != peerAddr and peer.port != peerPort , self.peers)
+                            for peer in peersToSend:
+                                peer.writer.write(invMsg.Serialize())
+                                logging.debug(f"Sending: msg=MsgType.InvMsg, peer={peer.addr}, peer_port={peer.port}")
+                                await peer.writer.drain()
+
         writer.close()
+        # TODO: Need to remove this socket from list of peers
         await writer.wait_closed()
 
     def runAsyncClient(self, peerAddr: str, peerPort: int):
@@ -210,7 +228,7 @@ if __name__ == "__main__":
     parser.add_argument('--paddr', help='peer address')
     parser.add_argument('--pport', type=int, help='peer port')
     args = parser.parse_args()
-    print(args)
+    # print(args)
     
     n = NetNode(args.addr, args.port)
     n.chain.CreateGenesisBlock()
