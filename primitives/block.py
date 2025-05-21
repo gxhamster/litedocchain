@@ -2,7 +2,7 @@ import hashlib
 from typing import Self
 from struct import Struct
 from serialization.serialize import Serializable
-from crypt.ed25519 import VerifySigPubkey
+from crypt.ed25519 import verify_sig_pubkey
 
 VERSION = 1
 
@@ -107,7 +107,7 @@ class Block(Serializable):
         ):
             return False
         if check_sig:
-            if not VerifySigPubkey(self.pubkey, self.signature, self.fileHash):
+            if not verify_sig_pubkey(self.pubkey, self.signature, self.fileHash):
                 return False
         return True
 

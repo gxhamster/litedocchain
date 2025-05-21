@@ -6,7 +6,7 @@ from typing import Self
 from enum import IntEnum
 import hashlib
 
-MAGIC_HDR_VALUE = b"litedocchain"
+MAGIC_HDR_VALUE = b'litedocchain'
 
 class MsgType(IntEnum):
     """Every MsgHdr has a command field which is a MsgType.

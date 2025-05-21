@@ -26,7 +26,7 @@ class NetNode:
         self.clients: list[Conn] = []   # Users connected to this node
         self.chain = Chain()
         
-    async def asyncServerCallback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def async_ser_callback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         addr = writer.get_extra_info("peername")
         logging.debug(f"Connected by: addr={addr[0]}, port={addr[1]}")
         while True:
@@ -129,9 +129,9 @@ class NetNode:
         logging.debug(f"Disconnected: addr={addr[0]}, port={addr[1]}")
         await writer.wait_closed()
 
-    async def asyncServer(self):
+    async def async_server(self):
         server = await asyncio.start_server(
-            self.asyncServerCallback, self.servAddr, self.servPort
+            self.async_ser_callback, self.servAddr, self.servPort
         )
 
         addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
@@ -140,15 +140,15 @@ class NetNode:
         async with server:
             await server.serve_forever()
 
-    def runAsyncServer(self):
-        asyncio.run(self.asyncServer())
+    def run_async_server(self):
+        asyncio.run(self.async_server())
 
-    async def asyncClient(self, peerAddr: str, peerPort: int):
+    async def async_client(self, thisPeerAddr: str, thisPeerPort: int):
         reader, writer = await asyncio.open_connection(
-            peerAddr, peerPort)
-        logging.debug(f"Connecting: peer_addr={peerAddr}, peer_port={peerPort}")
+            thisPeerAddr, thisPeerPort)
+        logging.debug(f"Connecting: peer_addr={thisPeerAddr}, peer_port={thisPeerPort}")
         logging.debug(f"Me: addr={writer.get_extra_info("sockname")[0]}, peer_port={writer.get_extra_info("sockname")[1]}")
-        self.peers.append(Conn(peerAddr, peerPort, reader, writer))
+        self.peers.append(Conn(thisPeerAddr, thisPeerPort, reader, writer))
         
         if len(self.peers) <= 0:
             logging.debug("No available peers yet")
@@ -186,9 +186,7 @@ class NetNode:
                 hdr = MsgHdr()
                 hdr = hdr.Deserialize(data[:hdrSize])
                 if hdr.command == MsgType.INVMSG:
-                    # TODO: Also need to send this broadcasted INV MSG to
-                    # peers except the incoming one.
-                    logging.debug(f"Received: msg=MsgType.InvMsg, peer_addr={peerAddr}, peer_port={peerPort}")
+                    logging.debug(f"Received: msg=MsgType.InvMsg, peer_addr={thisPeerAddr}, peer_port={thisPeerPort}")
                     invMsg = InvMsg()
                     invMsg.Deserialize(data)
                     for block in invMsg.blocks:
@@ -204,7 +202,7 @@ class NetNode:
                             self.chain.localChain.insert(targetIdx + 1, block)
                             self.chain.CheckChainIntegrity(check_sig=True)
                             logging.debug(f"Added block: {block.hdr.hash.hex()}")
-                            peersToSend = filter(lambda peer: peer.addr != peerAddr and peer.port != peerPort , self.peers)
+                            peersToSend = filter(lambda peer: peer.addr != thisPeerAddr and peer.port != thisPeerPort , self.peers)
                             for peer in peersToSend:
                                 peer.writer.write(invMsg.Serialize())
                                 logging.debug(f"Sending: msg=MsgType.InvMsg, peer={peer.addr}, peer_port={peer.port}")
@@ -214,8 +212,8 @@ class NetNode:
         # TODO: Need to remove this socket from list of peers
         await writer.wait_closed()
 
-    def runAsyncClient(self, peerAddr: str, peerPort: int):
-        asyncio.run(self.asyncClient(peerAddr, peerPort))
+    def run_async_client(self, peerAddr: str, peerPort: int):
+        asyncio.run(self.async_client(peerAddr, peerPort))
     
 
 if __name__ == "__main__":
@@ -233,15 +231,15 @@ if __name__ == "__main__":
     n = NetNode(args.addr, args.port)
     n.chain.CreateGenesisBlock()
     logging.debug(f"Added genesis block: hash={n.chain.GetGenesisBlock().hdr.hash.hex()}")
-    servThread = threading.Thread(target=n.runAsyncServer)
-    servThread.start()
+    serv_thread = threading.Thread(target=n.run_async_server)
+    serv_thread.start()
     
     if args.paddr is None or args.pport is None:
         logging.debug("Cannot connect to any peer, no peer address and port")
     else:
-        n.runAsyncClient(args.paddr, args.pport)
+        n.run_async_client(args.paddr, args.pport)
     
     try:
-        servThread.join()
+        serv_thread.join()
     except KeyboardInterrupt:
         logging.info("Shutting down node")
