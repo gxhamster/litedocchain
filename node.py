@@ -5,7 +5,7 @@ import argparse
 import dataclasses
 import socket
 from primitives.chain import Chain
-from net.message import MAGIC_HDR_VALUE, MsgHdr, BlockDataMsg, MsgType, GetBlocksMsg, InvMsg, VersionMsg, VersionConnType, AckMsg
+from net.message import *
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
                     datefmt='%m/%d/%Y %I:%M:%S %p',
@@ -138,6 +138,9 @@ class NetNode:
         server = await asyncio.start_server(
             self.async_ser_callback, self.servAddr, self.servPort
         )
+        
+        for sock in server.sockets:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
         logging.debug(f"Running node: addr={addrs}")
@@ -214,7 +217,9 @@ class NetNode:
                                 await peer.writer.drain()
 
         writer.close()
-        # TODO: Need to remove this socket from list of peers
+        # Need to remove this socket from list of peers
+        unremoved_peers = filter(lambda peer: peer.addr != thisPeerAddr and peer.port != thisPeerPort , self.peers)
+        self.peers = list(unremoved_peers)
         await writer.wait_closed()
 
     def run_async_client(self, peerAddr: str, peerPort: int):
