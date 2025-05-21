@@ -30,28 +30,36 @@ if __name__ == "__main__":
     
     if args.generate:
         try:
-            gen_priv_key(args.keyfile)
+            gen_priv_key(keyfile_name)
             print(f'Created key file, name={keyfile_name}')
         except OSError as err:
             print(f'Cannot create key file, name={keyfile_name}', err)
         
-    priv_key = import_prv_key_file(args.keyfile)
+    priv_key = import_prv_key_file(keyfile_name)
     if not priv_key:
         print(f'Cannot import private key file, name={keyfile_name}')
+        print('Exiting')
         sys.exit(-1)
     
     if args.file:
-        file_sig = compute_file_sig_inc(priv_key, args.file)
-        fileHash = b''
+        f_sig = compute_file_sig_inc(priv_key, args.file)
+        f_hash = b''
         with open(args.file, 'rb') as file:
             data = file.read()
-            verify_sig_from_file(priv_key, file_sig, data)
-            fileHash = sha256(data).digest()
+            verify_sig_from_file(priv_key, f_sig, data)
+            f_hash = sha256(data).digest()
+            print(f'File hash:', f_hash.hex())
+            print(f'File sign: {f_sig.hex()[:64]}\n{' '*11}{f_sig.hex()[64:]}')
         
         if args.addr and args.port:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((args.addr, args.port))
-                
+                try:
+                    sock.connect((args.addr, args.port))
+                except:
+                    print(f'Cannot connect to node: addr={args.addr}, port={args.port}')
+                    print('Exiting')
+                    sys.exit(-1)
+                    
                 verMsg = VersionMsg()
                 verMsg.connType = VersionConnType.CLIENT
                 verMsg.connAddr = socket.inet_aton(sock.getsockname()[0])
@@ -61,8 +69,8 @@ if __name__ == "__main__":
                 print(f"Connected to: node_addr={sock.getpeername()[0]}, node_port={sock.getpeername()[1]}")
                 block = Block()
                 block.pubkey = priv_key.public_key().public_bytes_raw()
-                block.signature = file_sig
-                block.fileHash = fileHash
+                block.signature = f_sig
+                block.fileHash = f_hash
                 block.hdr.hash =  block.hdr.CalculateHash(block.signature + block.fileHash + block.pubkey)
                 if not block.IsBlockValid(check_sig=True):
                     raise AssertionError("Block is not valid")
@@ -87,6 +95,8 @@ if __name__ == "__main__":
                         if ackMsg.nonce == 12:
                             print(f"Block created successfully on the network")
                             block_created = True
+                        elif ackMsg.nonce == 13:
+                            block_created = False
                 if not block_created:
                     print("Something went wrong, could not create the block")
                 sock.close()

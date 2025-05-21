@@ -86,6 +86,11 @@ class NetNode:
                             logging.debug("Chain integrity checks failed")
                             # Remove block from chain
                             self.chain.localChain.pop()
+                            # ACK to client to tell block failed
+                            ackMsg = AckMsg()
+                            ackMsg.nonce = 13
+                            writer.write(ackMsg.Serialize())
+                            await writer.drain()
                         else:
                             logging.debug(f"Added block: hash={self.chain.GetLastBlock().hdr.hash.hex()}")
                             invMsg = InvMsg()
