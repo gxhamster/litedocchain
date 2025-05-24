@@ -16,15 +16,19 @@ class Chain:
                 return b
         return None
 
-    def AddBlockToChain(self, block: Block) -> None:
-        """Insert as the latest block to the chain"""
+    def AddBlockToChain(self, block: Block, check_sig=False) -> bytes:
+        """Insert as the latest block to the chain. Return the hash of the
+        new block"""
         if len(self.localChain) > 0:
             block.hdr.hashPrevBlock = self.localChain[-1].hdr.hash
             block.hdr.time = time.time()
             block.hdr.version = VERSION
             block.MineBlock()
-            if block.IsBlockValid():
+            if block.IsBlockValid(check_sig=check_sig):
                 self.localChain.append(block)
+                return self.GetLastBlock().hdr.hash
+            else:
+                raise ValueError('Block is not valid')
         else:
             raise AssertionError("Add genesis block")
 
@@ -77,3 +81,20 @@ class Chain:
 
     def __len__(self):
         return len(self.localChain)
+
+    def __getitem__(self, key):
+        if isinstance(key, bytes):
+            # Block hash
+            blk = self.SearchByBlockHash(key)
+            if blk is None:
+                raise KeyError(f'{key} block not found')
+            else:
+                return blk
+        elif isinstance(key, int):
+            # Block index
+            if key < 0 or key >= len(self.localChain):
+                raise IndexError('Out of bounds access for chain')
+            else:
+                return self.localChain[key]
+        else:
+            raise KeyError('Unknown key for chain')
