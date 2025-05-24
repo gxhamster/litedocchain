@@ -1,7 +1,7 @@
 import time
 from primitives.block import Block, VERSION
 
-
+GENESIS_BLOCK_SIG = b'genesis'
 class Chain:
     """Immuatable list of Blocks. All chains must call CreateGenesisBlock
     before adding new blocks into the chain
@@ -52,7 +52,7 @@ class Chain:
         if len(self.localChain) == 0:
             genesis = Block()
             genesis.hdr.version = VERSION
-            genesis.signature = b"genesis"
+            genesis.signature = GENESIS_BLOCK_SIG
             genesis.hdr.time = 0
             genesis.hdr.hashPrevBlock = b"0" * 32
             genesis.hdr.hash = genesis.hdr.CalculateHash(genesis.signature)

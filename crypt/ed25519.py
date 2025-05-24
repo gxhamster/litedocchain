@@ -111,3 +111,26 @@ def compute_file_sig_inc(private_key: Ed25519PrivateKey, filePath: str) -> bytes
                 break
         signature = private_key.sign(sha256hasher.digest())
         return signature
+
+def compute_file_hash(file_path: str) -> bytes:
+    with open(file_path, 'rb') as reader:
+        bufSize = 1024
+        sha256hasher = sha256()
+        while True:
+            data = reader.read(bufSize)
+            sha256hasher.update(data)
+            if data == b'':
+                break
+        return sha256hasher.digest()
+    
+def compute_file_sig_hash_pair(private_key: Ed25519PrivateKey, filePath: str) -> tuple[bytes, bytes]:
+    with open(filePath, 'rb') as reader:
+        bufSize = 1024
+        sha256hasher = sha256()
+        while True:
+            data = reader.read(bufSize)
+            sha256hasher.update(data)
+            if data == b'':
+                break
+        signature = private_key.sign(sha256hasher.digest())
+        return (sha256hasher.digest(), signature)
