@@ -217,6 +217,7 @@ class NetNode:
                                 await peer.writer.drain()
 
         writer.close()
+        logging.debug(f"Drop peer connection to: addr={thisPeerAddr}, port={thisPeerPort}")
         # Need to remove this socket from list of peers
         unremoved_peers = filter(lambda peer: peer.addr != thisPeerAddr and peer.port != thisPeerPort , self.peers)
         self.peers = list(unremoved_peers)

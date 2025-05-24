@@ -50,7 +50,7 @@ class BlockHeader(Serializable):
     def __repr__(self):
         return f"""BlockHeader(version={self.version}, time={self.time}, prev={self.hashPrevBlock}, hash={self.hash}, nonce={self.nonce})"""
 
-
+BLK_DIFFICULTY=2
 class Block(Serializable):
     """For simplicty in this project, we will consider one document
     to be in a seperate block. This blockchain will have no concept of
@@ -88,7 +88,7 @@ class Block(Serializable):
         Also sets the new hash to the block.
         """
         tempHash = self.hdr.CalculateHash(self.signature + self.fileHash + self.pubkey)
-        difficulty = 2
+        difficulty = BLK_DIFFICULTY
         while not tempHash.startswith(b"\x00" * difficulty):
             self.hdr.nonce += 1
             tempHash = self.hdr.CalculateHash(
