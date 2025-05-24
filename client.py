@@ -1,10 +1,12 @@
 from crypt.ed25519 import *
-from net.message import BlockDataMsg, VersionMsg, VersionConnType, MAGIC_HDR_VALUE, AckMsg, MsgType, MsgHdr
+from net.message import *
 from primitives.block import Block
 from hashlib import sha256
 import argparse
 import socket
 import sys
+import struct
+import os
                     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -42,14 +44,12 @@ if __name__ == "__main__":
         sys.exit(-1)
     
     if args.file:
-        f_sig = compute_file_sig_inc(priv_key, args.file)
-        f_hash = b''
-        with open(args.file, 'rb') as file:
-            data = file.read()
-            verify_sig_from_file(priv_key, f_sig, data)
-            f_hash = sha256(data).digest()
-            print(f'File hash:', f_hash.hex())
-            print(f'File sign: {f_sig.hex()[:64]}\n{' '*11}{f_sig.hex()[64:]}')
+        # f_sig = compute_file_sig_inc(priv_key, args.file)
+        # f_hash = compute_file_hash(args.file)
+        f_hash, f_sig = compute_file_sig_hash_pair(priv_key, args.file)
+
+        print(f'File hash:', f_hash.hex())
+        print(f'File sign: {f_sig.hex()[:64]}\n{' '*11}{f_sig.hex()[64:]}')
         
         if args.addr and args.port:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -81,8 +81,16 @@ if __name__ == "__main__":
                 block_msg.hdr.checksum = block_msg.CalculateChecksum()
                 block_msg.hdr.size = len(block_msg.block.Serialize())
                 sock.sendall(block_msg.Serialize())
+                print(f"Sent block: file='{args.file}', node={sock.getpeername()[0]}")
                 
-                print(f"Sending: file='{args.file}', node={sock.getpeername()[0]}")
+                
+                print(f"Sending file contents: file='{args.file}', node={sock.getpeername()[0]}")
+                with open(args.file, 'rb') as file:
+                    file_size = struct.pack('>I', os.stat(args.file).st_size)
+                    sock.send(file_size)
+                    sent = sock.sendfile(file)
+                    print(f'Sent {sent} bytes')
+            
                 data = sock.recv(1024)
                 block_created = False
                 if data.startswith(MAGIC_HDR_VALUE):

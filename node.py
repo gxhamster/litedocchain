@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import struct
 import threading
 import argparse
 import dataclasses
@@ -30,20 +31,20 @@ class NetNode:
         addr = writer.get_extra_info("peername")
         logging.debug(f"Connected by: addr={addr[0]}, port={addr[1]}")
         while True:
-            data = await reader.read(2048)
-            if data == b"":
+            file_data = await reader.read(2048)
+            if file_data == b"":
                 logging.debug("Peer/Client probably sent an EOF")
                 break
-            if data.startswith(MAGIC_HDR_VALUE):
+            if file_data.startswith(MAGIC_HDR_VALUE):
                 hdrSize = MsgHdr.struct.size
                 hdr = MsgHdr()
-                hdr = hdr.Deserialize(data[:hdrSize])
+                hdr = hdr.Deserialize(file_data[:hdrSize])
                 if hdr.command == MsgType.NOMSG:
                     print(hdr.command)
                 elif hdr.command == MsgType.GETBLOCKMSG:
                     logging.debug("Received: msg=MsgType.GETBLOCKMSG, dir=[peer -> node]")
                     getBlockMsg = GetBlocksMsg()
-                    getBlockMsg = getBlockMsg.Deserialize(data)
+                    getBlockMsg = getBlockMsg.Deserialize(file_data)
                     startIdx = self.chain.GetBlockIdx(getBlockMsg.highestHash)
                     endIdx = self.chain.GetBlockIdx(getBlockMsg.stoppingHash)
                     if endIdx is None or getBlockMsg.stoppingHash.startswith(b'0' * 32):
@@ -72,7 +73,7 @@ class NetNode:
                     # Received blocks from clients
                     logging.debug("Received: msg=MsgType.BLOCKDATAMSG, dir=[client -> node]")
                     bMsg = BlockDataMsg()
-                    payload = bMsg.Deserialize(data)
+                    payload = bMsg.Deserialize(file_data)
                     if not payload.block.IsBlockValid(check_sig=True):
                         # Verify the block contents are correct
                         logging.debug("Received an invalid block from a client!")
@@ -103,6 +104,34 @@ class NetNode:
                                 await peer.writer.drain()
                                 logging.debug(f"Sending: msg=MsgType.InvMsg, peer={peer.addr}, peer_port={peer.port}")
                             
+                            # Wait for client to send all the file contents too.
+                            file_data = bytearray()
+                            file_recv_bytes = 0
+                            file_size_bytes = await reader.read(4)
+                            file_size, = struct.unpack('>I', file_size_bytes)
+                            logging.debug(f'Received: file_len={file_size}')
+                            
+                            while file_recv_bytes != file_size:
+                                data = await reader.read(file_size)
+                                file_recv_bytes += len(data)
+                                logging.debug(f'Received: file_progress={file_recv_bytes}/{file_size}')
+                                file_data.extend(data)
+                                
+                            logging.debug(f'Received full file: content_len={len(file_data)}')
+                            
+                            # Check if the received contents length matches the expected
+                            # file size
+                            if len(file_data) != file_size:
+                                ackMsg = AckMsg()
+                                ackMsg.nonce = 13
+                                writer.write(ackMsg.Serialize())
+                                await writer.drain()
+                                break
+                            
+                            # TODO: Put the file contents in some kind of index (storage)
+                            # where we can retreive it later.
+                            
+                            
                             # Send an ACK to the client to tell that the block has
                             # been propagated to all nodes on the network
                             ackMsg = AckMsg()
@@ -112,7 +141,7 @@ class NetNode:
                             
                 elif hdr.command == MsgType.VERSION:
                     verMsg = VersionMsg()
-                    verMsg.Deserialize(data)
+                    verMsg.Deserialize(file_data)
                     sockAddr = socket.inet_ntoa(verMsg.connAddr)
                     if verMsg.connType == VersionConnType.CLIENT:
                         logging.debug(f"Received: msg=MsgType.VERSION, type=CLIENT")

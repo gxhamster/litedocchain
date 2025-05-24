@@ -20,7 +20,6 @@ class MsgType(IntEnum):
     VERSION = 4
     ACK = 5
 
-
 class MsgHdr(Serializable):
     """Every message sent on the blockchain network will have a header
     with the metadata of the payload. Command field will be used to identify
@@ -208,3 +207,4 @@ class AckMsg(Serializable):
         nonce, = self.struct.unpack(buffer[hdrSize:])
         self.nonce = nonce
         return self
+    
