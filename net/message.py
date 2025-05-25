@@ -193,10 +193,10 @@ class AckMsg(Serializable):
     def __init__(self) -> None:
         super().__init__()
         self.hdr: MsgHdr = MsgHdr(MsgType.ACK)
-        self.nonce: int = 0 # To just pass any value with the ACK msg (if needed)
+        self.status: int = 0 # To just pass any value with the ACK msg (if needed)
     
     def Serialize(self) -> bytes:
-        fields = self.struct.pack(self.nonce)
+        fields = self.struct.pack(self.status)
         self.hdr.checksum = hashlib.sha256(fields).digest()[: MsgHdr.CHECKSUM_LEN]
         self.hdr.size = len(fields)
         return self.hdr.Serialize() + fields
@@ -205,6 +205,6 @@ class AckMsg(Serializable):
         hdrSize = self.hdr.struct.size
         self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
         nonce, = self.struct.unpack(buffer[hdrSize:])
-        self.nonce = nonce
+        self.status = nonce
         return self
     

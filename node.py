@@ -6,6 +6,7 @@ import argparse
 import dataclasses
 import socket
 from primitives.chain import Chain
+from primitives.block import BlockContent, BlockContentDB
 from net.message import *
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
@@ -26,6 +27,7 @@ class NetNode:
         self.peers: list[Conn] = []     # Other connected nodes
         self.clients: list[Conn] = []   # Users connected to this node
         self.chain = Chain()
+        self.content_db: BlockContentDB = BlockContentDB()
         
     async def async_ser_callback(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         addr = writer.get_extra_info("peername")
@@ -89,7 +91,7 @@ class NetNode:
                             self.chain.localChain.pop()
                             # ACK to client to tell block failed
                             ackMsg = AckMsg()
-                            ackMsg.nonce = 13
+                            ackMsg.status = 13
                             writer.write(ackMsg.Serialize())
                             await writer.drain()
                         else:
@@ -123,19 +125,29 @@ class NetNode:
                             # file size
                             if len(file_data) != file_size:
                                 ackMsg = AckMsg()
-                                ackMsg.nonce = 13
+                                ackMsg.status = 13
                                 writer.write(ackMsg.Serialize())
                                 await writer.drain()
                                 break
                             
-                            # TODO: Put the file contents in some kind of index (storage)
+                            # Put the file contents in some kind of index (storage)
                             # where we can retreive it later.
+                            blk_content = BlockContent()
+                            blk_content.contents = file_data
+                            blk_content.hdr = self.chain.GetLastBlock().hdr
+                            blk_content.file_name = 'put_name_here.txt'
+                            self.content_db.append(blk_content)
                             
-                            
+                            # TODO: Broadcast file contents to other nodes.
+                            # Only one node containing the file content is not
+                            # very distributed (Multiple-Source-Truth)
+                            # In real project file contents should probably encrypted with
+                            # file owner (client) private key using a symmetric encryption AES
+                                                        
                             # Send an ACK to the client to tell that the block has
                             # been propagated to all nodes on the network
                             ackMsg = AckMsg()
-                            ackMsg.nonce = 12
+                            ackMsg.status = 12
                             writer.write(ackMsg.Serialize())
                             await writer.drain()
                             
@@ -268,16 +280,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # print(args)
     
-    n = NetNode(args.addr, args.port)
-    n.chain.CreateGenesisBlock()
-    logging.debug(f"Added genesis block: hash={n.chain.GetGenesisBlock().hdr.hash.hex()}")
-    serv_thread = threading.Thread(target=n.run_async_server)
+    node = NetNode(args.addr, args.port)
+    node.chain.CreateGenesisBlock()
+    genesis_content = BlockContent()
+    genesis_content.hdr = node.chain.GetGenesisBlock().hdr
+    genesis_content.contents = bytearray(b'genesis')
+    node.content_db.append(genesis_content)
+    
+    logging.debug(f"Added genesis block: hash={node.chain.GetGenesisBlock().hdr.hash.hex()}")
+    serv_thread = threading.Thread(target=node.run_async_server)
     serv_thread.start()
     
     if args.paddr is None or args.pport is None:
         logging.debug("Cannot connect to any peer, no peer address and port")
     else:
-        n.run_async_client(args.paddr, args.pport)
+        node.run_async_client(args.paddr, args.pport)
     
     try:
         serv_thread.join()

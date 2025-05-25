@@ -1,7 +1,6 @@
 from crypt.ed25519 import *
 from net.message import *
 from primitives.block import Block
-from hashlib import sha256
 import argparse
 import socket
 import sys
@@ -19,11 +18,10 @@ if __name__ == "__main__":
     parser.add_argument('-a', '--addr', help='litedocchain node address')
     parser.add_argument('-p', '--port', type=int, help='litedocchain node port')
     parser.add_argument('--verify', action='store_true', help='verify a file exists in the chain')
+    parser.add_argument('--list-blocks', action='store_true', help='list blocks owned by me')
     args = parser.parse_args()
     # print(args)
-    if args.verify:
-        raise NotImplementedError("Verifcation is not yet implemented")
-    
+
     keyfile_name = ''
     if not args.keyfile:
         keyfile_name = DEFAULT_KEY_FILE
@@ -43,9 +41,10 @@ if __name__ == "__main__":
         print('Exiting')
         sys.exit(-1)
     
+    if args.list_blocks:
+       raise NotImplementedError('--list-blocks') 
+        
     if args.file:
-        # f_sig = compute_file_sig_inc(priv_key, args.file)
-        # f_hash = compute_file_hash(args.file)
         f_hash, f_sig = compute_file_sig_hash_pair(priv_key, args.file)
 
         print(f'File hash:', f_hash.hex())
@@ -65,47 +64,52 @@ if __name__ == "__main__":
                 verMsg.connAddr = socket.inet_aton(sock.getsockname()[0])
                 verMsg.connPort = sock.getsockname()[1]
                 sock.sendall(verMsg.Serialize())
-                
                 print(f"Connected to: node_addr={sock.getpeername()[0]}, node_port={sock.getpeername()[1]}")
-                block = Block()
-                block.pubkey = priv_key.public_key().public_bytes_raw()
-                block.signature = f_sig
-                block.fileHash = f_hash
-                block.hdr.hash =  block.hdr.CalculateHash(block.signature + block.fileHash + block.pubkey)
-                if not block.IsBlockValid(check_sig=True):
-                    raise AssertionError("Block is not valid")
                 
+                if args.verify:
+                    # Verify that a file you have actually belongs to you        
+                    raise NotImplementedError("Verifcation is not yet implemented")
+                else:
+                    # Send to create a new block
+                    block = Block()
+                    block.pubkey = priv_key.public_key().public_bytes_raw()
+                    block.signature = f_sig
+                    block.fileHash = f_hash
+                    block.hdr.hash =  block.hdr.CalculateHash(block.signature + block.fileHash + block.pubkey)
+                    if not block.IsBlockValid(check_sig=True):
+                        raise AssertionError("Block is not valid")
+                    
+                    
+                    block_msg = BlockDataMsg()
+                    block_msg.block = block
+                    block_msg.hdr.checksum = block_msg.CalculateChecksum()
+                    block_msg.hdr.size = len(block_msg.block.Serialize())
+                    sock.sendall(block_msg.Serialize())
+                    print(f"Sent block: file='{args.file}', node={sock.getpeername()[0]}")
+                    
+                    
+                    print(f"Sending file contents: file='{args.file}', node={sock.getpeername()[0]}")
+                    with open(args.file, 'rb') as file:
+                        file_size = struct.pack('>I', os.stat(args.file).st_size)
+                        sock.send(file_size)
+                        sent = sock.sendfile(file)
+                        print(f'Sent {sent} bytes')
                 
-                block_msg = BlockDataMsg()
-                block_msg.block = block
-                block_msg.hdr.checksum = block_msg.CalculateChecksum()
-                block_msg.hdr.size = len(block_msg.block.Serialize())
-                sock.sendall(block_msg.Serialize())
-                print(f"Sent block: file='{args.file}', node={sock.getpeername()[0]}")
-                
-                
-                print(f"Sending file contents: file='{args.file}', node={sock.getpeername()[0]}")
-                with open(args.file, 'rb') as file:
-                    file_size = struct.pack('>I', os.stat(args.file).st_size)
-                    sock.send(file_size)
-                    sent = sock.sendfile(file)
-                    print(f'Sent {sent} bytes')
-            
-                data = sock.recv(1024)
-                block_created = False
-                if data.startswith(MAGIC_HDR_VALUE):
-                    hdrSize = MsgHdr.struct.size
-                    hdr = MsgHdr()
-                    hdr = hdr.Deserialize(data[:hdrSize])
-                    if hdr.command == MsgType.ACK:
-                        ackMsg = AckMsg()
-                        ackMsg.Deserialize(data)
-                        if ackMsg.nonce == 12:
-                            print(f"Block created successfully on the network")
-                            block_created = True
-                        elif ackMsg.nonce == 13:
-                            block_created = False
-                if not block_created:
-                    print("Something went wrong, could not create the block")
-                sock.close()
+                    data = sock.recv(1024)
+                    block_created = False
+                    if data.startswith(MAGIC_HDR_VALUE):
+                        hdrSize = MsgHdr.struct.size
+                        hdr = MsgHdr()
+                        hdr = hdr.Deserialize(data[:hdrSize])
+                        if hdr.command == MsgType.ACK:
+                            ackMsg = AckMsg()
+                            ackMsg.Deserialize(data)
+                            if ackMsg.status == 12:
+                                print(f"Block created successfully on the network")
+                                block_created = True
+                            elif ackMsg.status == 13:
+                                block_created = False
+                    if not block_created:
+                        print("Something went wrong, could not create the block")
+                    sock.close()
         

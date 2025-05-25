@@ -1,4 +1,5 @@
 import hashlib
+from io import BytesIO
 from typing import Self
 from struct import Struct
 from serialization.serialize import Serializable
@@ -113,3 +114,31 @@ class Block(Serializable):
 
     def __repr__(self) -> str:
         return f"""Block({self.hdr}, signature={self.signature}, fileHash={self.fileHash}, pubkey={self.pubkey})"""
+
+class BlockContent():
+    """ A storage structure to hold the contents of the file which the block has a 
+    signature on file hash of.
+    """
+    def __init__(self) -> None:
+        self.hdr: BlockHeader = BlockHeader()
+        self.file_name: str = '' # We might need file name (ext) on platforms that require it for encoding (Windows)
+        self.contents: bytearray = bytearray()
+        
+class BlockContentDB():
+    def __init__(self) -> None:
+        self.db: list[BlockContent] = []
+        
+    def __len__(self):
+        return self.db.__len__()
+    
+    def __getitem__(self, idx):
+        return self.db.__getitem__(idx)
+    
+    def __setitem__(self, idx, val):
+        self.db.__setitem__(idx, val)
+        
+    def append(self, blk_content: BlockContent):
+        self.db.append(blk_content)
+
+    
+    
