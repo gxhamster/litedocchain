@@ -134,3 +134,5 @@ def compute_file_sig_hash_pair(private_key: Ed25519PrivateKey, filePath: str) ->
                 break
         signature = private_key.sign(sha256hasher.digest())
         return (sha256hasher.digest(), signature)
+
+    

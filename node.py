@@ -7,6 +7,7 @@ import dataclasses
 import socket
 from primitives.chain import Chain
 from primitives.block import BlockContent, BlockContentDB
+from crypt.ed25519 import verify_sig_pubkey
 from net.message import *
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
@@ -41,7 +42,7 @@ class NetNode:
                 hdr = MsgHdr()
                 hdr = hdr.Deserialize(hdr_bytes)
                 if hdr.command == MsgType.NOMSG:
-                    print(hdr.command)
+                    logging.debug("Received: msg=MsgType.NOMSG")
                 elif hdr.command == MsgType.GETBLOCKMSG:
                     logging.debug("Received: msg=MsgType.GETBLOCKMSG, dir=[peer -> node]")
                     get_block_msg_bytes = await reader.read(hdr.size)
@@ -167,7 +168,41 @@ class NetNode:
                         logging.debug("MsgType.VERSION: connType=UNKNOWN")
                 
                 elif hdr.command == MsgType.REQVERIFICATION:
-                    raise NotImplementedError('MsgType.REQVERIFICATION')
+                    req_ver_msg_bytes = await reader.read(hdr.size)
+                    req_ver_msg = ReqVerificationMsg()
+                    req_ver_msg.Deserialize(hdr_bytes + req_ver_msg_bytes)
+                    logging.debug(f"Received: msg=MsgType.REQVERIFICATION")
+                    # Client sent an invalid ReqVerificationMsg. The signature does not belong
+                    # to this client. Client could have forged a file hash
+                    if not verify_sig_pubkey(req_ver_msg.pubkey, req_ver_msg.sig, req_ver_msg.file_hash):
+                        logging.debug("MsgType.REQVERIFICATION: Signature verification failed")
+                        ackMsg = AckMsg()
+                        ackMsg.status = 13
+                        writer.write(ackMsg.Serialize())
+                        await writer.drain()
+                        
+                    # Find a matching block
+                    found_block = False
+                    for blk in self.chain:
+                        if blk.fileHash == req_ver_msg.file_hash:
+                            if blk.signature == req_ver_msg.sig and blk.pubkey == req_ver_msg.pubkey:
+                                found_block = True
+                    
+                    if not found_block:
+                        logging.debug("MsgType.REQVERIFICATION: Cannot find a block for the requested file")
+                        ackMsg = AckMsg()
+                        ackMsg.status = 13
+                        writer.write(ackMsg.Serialize())
+                        await writer.drain()
+                    else:
+                        # Check file contents (some kind of random pattern matching)
+                        ackMsg = AckMsg()
+                        ackMsg.status = 12
+                        writer.write(ackMsg.Serialize())
+                        await writer.drain()
+                    
+                    
+                    # raise NotImplementedError('MsgType.REQVERIFICATION')
                         
                 else:
                     logging.debug("Invalid MsgType")
