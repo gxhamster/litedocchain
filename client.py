@@ -6,6 +6,7 @@ import socket
 import sys
 import struct
 import os
+import time
                     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -67,8 +68,14 @@ if __name__ == "__main__":
                 print(f"Connected to: node_addr={sock.getpeername()[0]}, node_port={sock.getpeername()[1]}")
                 
                 if args.verify:
-                    # Verify that a file you have actually belongs to you        
-                    raise NotImplementedError("Verifcation is not yet implemented")
+                    # Verify that a file you have actually belongs to you
+                    req_ver_msg = ReqVerificationMsg()
+                    req_ver_msg.file_hash = f_hash
+                    req_ver_msg.sig = f_sig
+                    req_ver_msg.pubkey = priv_key.public_key().public_bytes_raw()                    
+                    sock.sendall(req_ver_msg.Serialize())
+                            
+                    # raise NotImplementedError("Verifcation is not yet implemented")
                 else:
                     # Send to create a new block
                     block = Block()
@@ -95,15 +102,15 @@ if __name__ == "__main__":
                         sent = sock.sendfile(file)
                         print(f'Sent {sent} bytes')
                 
-                    data = sock.recv(1024)
+                    hdr_bytes = sock.recv(MsgHdr.struct.size)
                     block_created = False
-                    if data.startswith(MAGIC_HDR_VALUE):
-                        hdrSize = MsgHdr.struct.size
+                    if hdr_bytes.startswith(MAGIC_HDR_VALUE):
                         hdr = MsgHdr()
-                        hdr = hdr.Deserialize(data[:hdrSize])
+                        hdr = hdr.Deserialize(hdr_bytes)
                         if hdr.command == MsgType.ACK:
+                            ack_msg_bytes = sock.recv(hdr.size)
                             ackMsg = AckMsg()
-                            ackMsg.Deserialize(data)
+                            ackMsg.Deserialize(hdr_bytes + ack_msg_bytes)
                             if ackMsg.status == 12:
                                 print(f"Block created successfully on the network")
                                 block_created = True

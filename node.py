@@ -33,20 +33,20 @@ class NetNode:
         addr = writer.get_extra_info("peername")
         logging.debug(f"Connected by: addr={addr[0]}, port={addr[1]}")
         while True:
-            file_data = await reader.read(2048)
-            if file_data == b"":
+            hdr_bytes = await reader.read(MsgHdr.struct.size)
+            if hdr_bytes == b"":
                 logging.debug("Peer/Client probably sent an EOF")
                 break
-            if file_data.startswith(MAGIC_HDR_VALUE):
-                hdrSize = MsgHdr.struct.size
+            if hdr_bytes.startswith(MAGIC_HDR_VALUE):
                 hdr = MsgHdr()
-                hdr = hdr.Deserialize(file_data[:hdrSize])
+                hdr = hdr.Deserialize(hdr_bytes)
                 if hdr.command == MsgType.NOMSG:
                     print(hdr.command)
                 elif hdr.command == MsgType.GETBLOCKMSG:
                     logging.debug("Received: msg=MsgType.GETBLOCKMSG, dir=[peer -> node]")
+                    get_block_msg_bytes = await reader.read(hdr.size)
                     getBlockMsg = GetBlocksMsg()
-                    getBlockMsg = getBlockMsg.Deserialize(file_data)
+                    getBlockMsg = getBlockMsg.Deserialize(hdr_bytes + get_block_msg_bytes)
                     startIdx = self.chain.GetBlockIdx(getBlockMsg.highestHash)
                     endIdx = self.chain.GetBlockIdx(getBlockMsg.stoppingHash)
                     if endIdx is None or getBlockMsg.stoppingHash.startswith(b'0' * 32):
@@ -74,8 +74,9 @@ class NetNode:
                 elif hdr.command == MsgType.BLOCKDATAMSG:
                     # Received blocks from clients
                     logging.debug("Received: msg=MsgType.BLOCKDATAMSG, dir=[client -> node]")
+                    block_data_msg_bytes = await reader.read(hdr.size)
                     bMsg = BlockDataMsg()
-                    payload = bMsg.Deserialize(file_data)
+                    payload = bMsg.Deserialize(hdr_bytes + block_data_msg_bytes)
                     if not payload.block.IsBlockValid(check_sig=True):
                         # Verify the block contents are correct
                         logging.debug("Received an invalid block from a client!")
@@ -114,10 +115,10 @@ class NetNode:
                             logging.debug(f'Received: file_len={file_size}')
                             
                             while file_recv_bytes != file_size:
-                                data = await reader.read(file_size)
-                                file_recv_bytes += len(data)
+                                temp_buf = await reader.read(file_size)
+                                file_recv_bytes += len(temp_buf)
                                 logging.debug(f'Received: file_progress={file_recv_bytes}/{file_size}')
-                                file_data.extend(data)
+                                file_data.extend(temp_buf)
                                 
                             logging.debug(f'Received full file: content_len={len(file_data)}')
                             
@@ -152,8 +153,9 @@ class NetNode:
                             await writer.drain()
                             
                 elif hdr.command == MsgType.VERSION:
+                    version_msg_bytes = await reader.read(hdr.size)
                     verMsg = VersionMsg()
-                    verMsg.Deserialize(file_data)
+                    verMsg.Deserialize(hdr_bytes + version_msg_bytes)
                     sockAddr = socket.inet_ntoa(verMsg.connAddr)
                     if verMsg.connType == VersionConnType.CLIENT:
                         logging.debug(f"Received: msg=MsgType.VERSION, type=CLIENT")
@@ -163,7 +165,9 @@ class NetNode:
                         logging.debug(f"MsgType.VERSION: type=NODE")
                     else:
                         logging.debug("MsgType.VERSION: connType=UNKNOWN")
-                    
+                
+                elif hdr.command == MsgType.REQVERIFICATION:
+                    raise NotImplementedError('MsgType.REQVERIFICATION')
                         
                 else:
                     logging.debug("Invalid MsgType")
@@ -216,7 +220,7 @@ class NetNode:
         # Initiate the IBD (Initial Block Download)  
         getBlockMsg = GetBlocksMsg()
         getBlockMsg.highestHash = self.chain.GetLastBlock().hdr.hash
-        getBlockMsg.stoppingHash = b'0' * 32
+        getBlockMsg.stoppingHash = b'0' * 32    # Get all hashes upto last
         getBlockMsg.SetChecksumSize()
         peerWriterSock = self.peers[-1].writer  # For now just select last peer
         peerReaderSock = self.peers[-1].reader
@@ -226,18 +230,18 @@ class NetNode:
         # Note(iyaan): Maybe hardcoding the reading size is not ideal
         # What happens when we are reading a large InvMsg?
         while True:
-            data = await peerReaderSock.read(2048)
-            if data == b'':
+            hdr_bytes = await peerReaderSock.read(MsgHdr.struct.size)
+            if hdr_bytes == b'':
                 logging.debug("Server probably sent an EOF")
                 break
-            elif data.startswith(MAGIC_HDR_VALUE):
-                hdrSize = MsgHdr.struct.size
+            elif hdr_bytes.startswith(MAGIC_HDR_VALUE):
                 hdr = MsgHdr()
-                hdr = hdr.Deserialize(data[:hdrSize])
+                hdr = hdr.Deserialize(hdr_bytes)
                 if hdr.command == MsgType.INVMSG:
                     logging.debug(f"Received: msg=MsgType.InvMsg, peer_addr={thisPeerAddr}, peer_port={thisPeerPort}")
+                    inv_msg_bytes = await reader.read(hdr.size)
                     invMsg = InvMsg()
-                    invMsg.Deserialize(data)
+                    invMsg.Deserialize(hdr_bytes + inv_msg_bytes)
                     for block in invMsg.blocks:
                         # Find the block which matches the hashPrev
                         targetIdx = -1

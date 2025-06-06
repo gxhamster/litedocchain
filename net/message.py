@@ -19,6 +19,7 @@ class MsgType(IntEnum):
     INVMSG = 3
     VERSION = 4
     ACK = 5
+    REQVERIFICATION = 6
 
 class MsgHdr(Serializable):
     """Every message sent on the blockchain network will have a header
@@ -208,3 +209,33 @@ class AckMsg(Serializable):
         self.status = nonce
         return self
     
+class ReqVerificationMsg(Serializable):
+    """ Message sent by client to verify a file
+    """
+    struct = Struct(">64s32s32s")
+    def __init__(self) -> None:
+        super().__init__()
+        self.hdr: MsgHdr = MsgHdr(MsgType.REQVERIFICATION)
+        self.sig: bytes = b''       # 64 byte
+        self.file_hash: bytes = b'' # 32 byte
+        self.pubkey: bytes = b''    # 32 byte
+        
+    def Serialize(self) -> bytes:
+        fieldBytes = self.struct.pack(self.sig, self.file_hash, self.pubkey)
+        self.hdr.checksum = hashlib.sha256(fieldBytes).digest()[: MsgHdr.CHECKSUM_LEN]
+        self.hdr.size = len(fieldBytes)
+        hdrBytes = self.hdr.Serialize()
+        return hdrBytes + fieldBytes
+
+    
+    def Deserialize(self, buffer: bytes) -> Self:
+        hdrSize = self.hdr.struct.size
+        self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
+        sigBytes, fHash, pKey = self.struct.unpack(buffer[hdrSize:])
+        self.sig, self.file_hash, self.pubkey = sigBytes, fHash, pKey
+        return self
+    
+    def __repr__(self) -> str:
+        return f"""{self.__class__.__name__}({self.hdr}, sig={self.sig.hex()}, file_hash={self.file_hash.hex()}, pubkey={self.pubkey.hex()})"""
+    
+         
