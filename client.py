@@ -44,7 +44,7 @@ if __name__ == "__main__":
         
     if args.show_keys:
         print(f'Public key:  {priv_key.public_key().public_bytes_raw().hex()}')
-        print(f'Private key: {priv_key.private_bytes_raw().hex()}')
+        print(f'Private key: {priv_key.private_bytes_raw().hex()} (DONT REVEAL!)')
     
     if args.list_blocks:
        raise NotImplementedError('--list-blocks') 

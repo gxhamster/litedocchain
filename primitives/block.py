@@ -139,6 +139,34 @@ class BlockContentDB():
         
     def append(self, blk_content: BlockContent):
         self.db.append(blk_content)
+        
+        
+def RabinKarp(search_str: str, pattern: str) -> int:
+    """ Returns index of start of found pattern if found, otherwise returns -1
+    Since I am just going to be using this to match hex as strings I dont think we need
+    to add a modulo restriction. base = 16 for hex
+    """
+    if pattern == '':
+        return -1
+    base = 16
+    h_pattern = 0
+    # Compute hash for pattern
+    for i in range(len(pattern)):
+        h_pattern += ord(pattern[i]) * pow(base, len(pattern) - i - 1)
+    
+    # Compute hash for substring
+    for i in range(len(search_str) - len(pattern) + 1):
+        sub_str = search_str[i:i+len(pattern)]
+        h_sub = 0
+        for k in range(len(sub_str)):
+            h_sub += ord(sub_str[k]) * pow(base, len(pattern) - k - 1)
+        
+        if h_sub == h_pattern:
+            # Compare individually
+            if sub_str == pattern:
+                return i
+            
+    return -1
 
     
     
