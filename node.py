@@ -207,13 +207,38 @@ class NetNode:
                     req_ver_msg = ReqVerificationMsg()
                     req_ver_msg.Deserialize(hdr_bytes + req_ver_msg_bytes)
                     logging.debug(f"Received: msg=MsgType.REQVERIFICATION")
-                    # Client sent an invalid ReqVerificationMsg. The signature does not belong
-                    # to this client. Client could have forged a file hash
-                    if not verify_sig_pubkey(
-                        req_ver_msg.pubkey, req_ver_msg.sig, req_ver_msg.file_hash
-                    ):
+                    
+                    # Wait for client to send all the file contents too.
+                    file_data = bytearray()
+                    file_recv_bytes = 0
+                    file_size_bytes = await reader.read(4)
+                    (file_size,) = struct.unpack(">I", file_size_bytes)
+                    logging.debug(f"Received: file_len={file_size}")
+
+                    while file_recv_bytes != file_size:
+                        temp_buf = await reader.read(file_size)
+                        file_recv_bytes += len(temp_buf)
                         logging.debug(
-                            "MsgType.REQVERIFICATION: Signature verification failed"
+                            f"Received: file_progress={file_recv_bytes}/{file_size}"
+                        )
+                        file_data.extend(temp_buf)
+
+                    logging.debug(
+                        f"Received full file: content_len={len(file_data)}"
+                    )
+
+                    # Check if the received contents length matches the expected file size
+                    if len(file_data) != file_size:
+                        ackMsg = AckMsg()
+                        ackMsg.status = 13
+                        writer.write(ackMsg.Serialize())
+                        await writer.drain()
+                        break
+                    
+                    
+                    if hashlib.sha256(file_data).digest() != req_ver_msg.file_hash:
+                        logging.debug(
+                            "MsgType.REQVERIFICATION: File hash mismatch"
                         )
                         ackMsg = AckMsg()
                         ackMsg.status = 13
@@ -223,15 +248,23 @@ class NetNode:
                     # Find a matching block
                     v_blocks = filter(
                         lambda blk: blk.fileHash == req_ver_msg.file_hash
-                        and blk.signature == req_ver_msg.sig
                         and blk.pubkey == req_ver_msg.pubkey,
                         self.chain,
                     )
-                    found_block = next(v_blocks, None) is not None
+                    target_block = next(v_blocks, None)
+                    found_block = target_block is not None
 
                     if not found_block:
                         logging.debug(
                             "MsgType.REQVERIFICATION: Cannot find a block for the requested file"
+                        )
+                        ackMsg = AckMsg()
+                        ackMsg.status = 13
+                        writer.write(ackMsg.Serialize())
+                        await writer.drain()
+                    elif not verify_sig_pubkey(req_ver_msg.pubkey, target_block.signature, req_ver_msg.file_hash):
+                        logging.debug(
+                            "MsgType.REQVERIFICATION: Signature verification failed"
                         )
                         ackMsg = AckMsg()
                         ackMsg.status = 13

@@ -212,16 +212,15 @@ class AckMsg(Serializable):
 class ReqVerificationMsg(Serializable):
     """ Message sent by client to verify a file
     """
-    struct = Struct(">64s32s32s")
+    struct = Struct(">32s32s")
     def __init__(self) -> None:
         super().__init__()
         self.hdr: MsgHdr = MsgHdr(MsgType.REQVERIFICATION)
-        self.sig: bytes = b''       # 64 byte
         self.file_hash: bytes = b'' # 32 byte
         self.pubkey: bytes = b''    # 32 byte
         
     def Serialize(self) -> bytes:
-        fieldBytes = self.struct.pack(self.sig, self.file_hash, self.pubkey)
+        fieldBytes = self.struct.pack(self.file_hash, self.pubkey)
         self.hdr.checksum = hashlib.sha256(fieldBytes).digest()[: MsgHdr.CHECKSUM_LEN]
         self.hdr.size = len(fieldBytes)
         hdrBytes = self.hdr.Serialize()
@@ -231,11 +230,11 @@ class ReqVerificationMsg(Serializable):
     def Deserialize(self, buffer: bytes) -> Self:
         hdrSize = self.hdr.struct.size
         self.hdr = self.hdr.Deserialize(buffer[:hdrSize])
-        sigBytes, fHash, pKey = self.struct.unpack(buffer[hdrSize:])
-        self.sig, self.file_hash, self.pubkey = sigBytes, fHash, pKey
+        fHash, pKey = self.struct.unpack(buffer[hdrSize:])
+        self.file_hash, self.pubkey = fHash, pKey
         return self
     
     def __repr__(self) -> str:
-        return f"""{self.__class__.__name__}({self.hdr}, sig={self.sig.hex()}, file_hash={self.file_hash.hex()}, pubkey={self.pubkey.hex()})"""
+        return f"""{self.__class__.__name__}({self.hdr}, file_hash={self.file_hash.hex()}, pubkey={self.pubkey.hex()})"""
     
          
