@@ -1,12 +1,13 @@
 import asyncio
 import logging
+import random
 import struct
 import threading
 import argparse
 import dataclasses
 import socket
 from primitives.chain import Chain
-from primitives.block import BlockContent, BlockContentDB
+from primitives.block import BlockContent, BlockContentDB, RabinKarp
 from crypt.ed25519 import verify_sig_pubkey
 from net.message import *
 
@@ -271,11 +272,33 @@ class NetNode:
                         writer.write(ackMsg.Serialize())
                         await writer.drain()
                     else:
-                        # Check file contents (some kind of random pattern matching)
-                        ackMsg = AckMsg()
-                        ackMsg.status = 12
-                        writer.write(ackMsg.Serialize())
-                        await writer.drain()
+                        # Get file contents of 32 byte sizes
+                        iterations = 50
+                        pattern_failed = False
+                        for _ in range(iterations):
+                            rand_file_ptr = random.randint(0, len(file_data) - 1 - 32)
+                            block_idx = self.chain.GetBlockIdx(target_block.hdr.hash)
+                            assert block_idx is not None
+                            c1 = self.content_db[block_idx].contents[rand_file_ptr:rand_file_ptr+32]
+                            c2 = file_data[rand_file_ptr:rand_file_ptr+32]
+                            if RabinKarp(c2.hex(), c1.hex()) == -1:
+                                logging.debug(
+                                    "MsgType.REQVERIFICATION: Pattern matching failed"
+                                )
+                                pattern_failed = True
+                                
+                        
+                        if not pattern_failed:
+                            ackMsg = AckMsg()
+                            ackMsg.status = 12
+                            writer.write(ackMsg.Serialize())
+                            await writer.drain()
+                        else: 
+                            ackMsg = AckMsg()
+                            ackMsg.status = 13
+                            writer.write(ackMsg.Serialize())
+                            await writer.drain()
+                            writer.close()
 
                     # raise NotImplementedError('MsgType.REQVERIFICATION')
 
@@ -418,7 +441,7 @@ if __name__ == "__main__":
     node.content_db.append(genesis_content)
 
     logging.debug(
-        f"Added genesis block: hash={node.chain.GetGenesisBlock().hdr.hash.hex()}"
+        f"Genesis: hash={node.chain.GetGenesisBlock().hdr.hash.hex()}"
     )
     serv_thread = threading.Thread(target=node.run_async_server)
     serv_thread.start()
