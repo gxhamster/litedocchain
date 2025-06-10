@@ -1,8 +1,14 @@
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
+import sys
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+        Ed25519PublicKey,
+    )
+except ModuleNotFoundError:
+    print('Need to install cryptography module')
+    print('pip install cryptography')
+    sys.exit(-1)
 from typing import cast
 from hashlib import sha256
 
