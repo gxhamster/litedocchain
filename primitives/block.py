@@ -51,6 +51,10 @@ class BlockHeader(Serializable):
     def __repr__(self):
         return f"""BlockHeader(version={self.version}, time={self.time}, prev={self.hashPrevBlock}, hash={self.hash}, nonce={self.nonce})"""
 
+# BLK_DIFFICULTY determines how many zeros need to be matched
+# to be considered a valid block by the PoW algorithm. As the 
+# difficulty increases it will take more time. By default, it 
+# needs to match 2 bytes
 BLK_DIFFICULTY=2
 class Block(Serializable):
     """For simplicty in this project, we will consider one document
@@ -86,7 +90,7 @@ class Block(Serializable):
         """Find a nonce value that gives us a hash of some pattern.
         Bitcoin accepts a hash starting with 10 zeros (could be more).
         We will use a pattern that gives 3 zeros just to make it faster.
-        Also sets the new hash to the block.
+        Also sets the new hash to the block. Uses a PoW algorithm
         """
         tempHash = self.hdr.CalculateHash(self.signature + self.fileHash + self.pubkey)
         difficulty = BLK_DIFFICULTY

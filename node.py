@@ -38,6 +38,7 @@ class NetNode:
     async def node_server_callback(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
+        """Corresponds to one connection to node server by peer/clients"""
         addr = writer.get_extra_info("peername")
         logging.debug(f"Connected by: addr={addr[0]}, port={addr[1]}")
         while True:
@@ -93,6 +94,7 @@ class NetNode:
         asyncio.run(self.async_server())
 
     async def async_client(self, thisPeerAddr: str, thisPeerPort: int):
+        """ Corresponds to one peer connection"""
         reader, writer = await asyncio.open_connection(thisPeerAddr, thisPeerPort)
         addr = writer.get_extra_info("peername")
         logging.debug(f"Connecting: peer_addr={addr[0]}, peer_port={addr[1]}")
@@ -206,6 +208,9 @@ async def invmsg_handle(handler: MsgHandler, node: NetNode):
         if targetIdx == -1:
             logging.debug(f"Cannot add block: {block.hdr.hash.hex()}")
         else:
+            # Insert this new block into the nodes localchain and send this new block
+            # to all the peers connected to this node except the node which sent this 
+            # block
             node.chain.localChain.insert(targetIdx + 1, block)
             node.chain.CheckChainIntegrity(check_sig=True)
             logging.debug(f"Added block: {block.hdr.hash.hex()}")
@@ -234,12 +239,14 @@ async def reqvermsg_handle(handler: MsgHandler, node: NetNode):
         await send_fail_ack_exit(handler)
         return
 
+    # Compute the file hash of the received file and compare it with the
+    # request file hash
     if hashlib.sha256(file_data).digest() != req_ver_msg.file_hash:
         logging.debug("MsgType.REQVERIFICATION: File hash mismatch")
         await send_fail_ack_exit(handler)
         return
 
-    # Find a matching block
+    # Find a matching block which has same file hash and pubkey
     v_blocks = filter(
         lambda blk: blk.fileHash == req_ver_msg.file_hash
         and blk.pubkey == req_ver_msg.pubkey,
@@ -331,7 +338,9 @@ async def send_suc_ack_exit(handler: MsgHandler):
 
 
 async def recv_file_data(handler: MsgHandler) -> bytearray | None:
-    # Wait for client to send all the file contents too.
+    """Wait for client to send all the file contents too
+    Returns all the file data as one bytearray.
+    """
     file_data = bytearray()
     file_recv_bytes = 0
     file_size_bytes = await handler.reader.read(4)
@@ -356,7 +365,8 @@ async def recv_file_data(handler: MsgHandler) -> bytearray | None:
 
 
 async def blockdatamsg_handle(handler: MsgHandler, node: NetNode):
-    # Received blocks from clients
+    """Received blocks from clients. These blocks are not yet mined. They are
+    more like block requests"""
     logging.debug("Received: msg=MsgType.BLOCKDATAMSG, dir=[client -> node]")
     block_data_msg_bytes = await handler.reader.read(handler.hdr.size)
     bMsg = BlockDataMsg()
